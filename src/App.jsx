@@ -305,6 +305,9 @@ Correct: [A, B, C, or D]`;
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1 style={{fontSize: isMobile ? '20px' : '24px'}}>History Explorer</h1>
+          <div style={{ padding: '5px 10px', background: '#ff0000', color: '#fff', borderRadius: '4px', fontSize: '10px' }}>
+            v3ee54e6
+          </div>
           {timerActive && (
             <div style={{ padding: '8px 15px', backgroundColor: timeLeft < 10 ? '#c0392b' : '#333', borderRadius: '20px', fontWeight: 'bold' }}>
               ⏱ {timeLeft}s
