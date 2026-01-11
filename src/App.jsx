@@ -331,8 +331,13 @@ Correct: [A, B, C, or D]`;
               <p style={{ color: '#888' }}>Loading content...</p>
             )}
             
-            {/* Debug info - always visible */}
-            <div style={{ padding: '10px', background: '#333', borderRadius: '4px', marginBottom: '15px', fontSize: '12px', border: '1px solid #555' }}>
+            {/* Debug info - always visible - TEST VERSION */}
+            <div style={{ padding: '15px', background: '#ff6b6b', borderRadius: '8px', marginBottom: '15px', fontSize: '14px', border: '2px solid #fff', color: '#fff' }}>
+              <strong>🔍 DEBUG BOX - IF YOU SEE THIS, CODE IS RUNNING</strong>
+              <div style={{ marginTop: '10px' }}>
+                Questions found: <strong style={{ fontSize: '18px' }}>{content.questions?.length || 0}</strong>
+              </div>
+              <div style={{ marginTop: '10px', padding: '10px', background: '#333', borderRadius: '4px' }}>
               <strong style={{ color: '#3498db' }}>Debug Info:</strong>
               <div style={{ marginTop: '5px', color: '#fff' }}>
                 Questions found: <strong>{content.questions?.length || 0}</strong>
