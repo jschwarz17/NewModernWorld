@@ -100,7 +100,34 @@ function App() {
       return;
     }
 
-    const prompt = `You are a world-class historian. Write a short factual paragraph about historical events in ${continentName} strictly between ${year} and ${endYear}. Format strictly with: Time Period: ${year}-${endYear}, [paragraph], and 3 Multiple Choice Questions with A/B/C/D and Correct: [letter].`;
+    const prompt = `You are a world-class historian. Write a factual paragraph (exactly 150 words) about historical events in ${continentName} strictly between ${year} and ${endYear}. 
+
+Format your response EXACTLY as follows:
+
+Time Period: ${year}-${endYear}
+
+[Your 150-word paragraph here]
+
+Question 1: [Question text]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+D) [Option D]
+Correct: [A, B, C, or D]
+
+Question 2: [Question text]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+D) [Option D]
+Correct: [A, B, C, or D]
+
+Question 3: [Question text]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+D) [Option D]
+Correct: [A, B, C, or D]`;
 
     try {
       const res = await axios.post('https://api.x.ai/v1/chat/completions', {
@@ -116,53 +143,87 @@ function App() {
         return;
       }
 
-      // More flexible parsing - handle different formats
+      // Parse the response
       let period = '';
       let paragraph = '';
       let questions = [];
 
-      // Try to extract time period
+      // Extract time period
       const periodMatch = text.match(/Time Period:\s*(\d+-\d+)/i);
       if (periodMatch) {
         period = periodMatch[1];
       }
 
-      // Split by double newlines or look for paragraph
-      const parts = text.split(/\n\n+/);
-      
-      // Find the paragraph (usually after time period, before questions)
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i].trim();
-        if (part && !part.match(/^Time Period:/i) && !part.match(/^Question \d+:/i) && !part.match(/^[A-D]\)/)) {
-          paragraph = part;
-          break;
+      // Extract paragraph - everything between Time Period and first Question
+      const paragraphMatch = text.match(/Time Period:.*?\n\n(.*?)(?=\n\nQuestion \d+:|$)/is);
+      if (paragraphMatch) {
+        paragraph = paragraphMatch[1].trim();
+      } else {
+        // Fallback: get text between Time Period and first Question
+        const questionStart = text.search(/Question \d+:/i);
+        if (questionStart > 0) {
+          paragraph = text.substring(0, questionStart)
+            .replace(/Time Period:.*?\n\n?/i, '')
+            .trim();
         }
       }
 
-      // Extract questions
-      const questionBlocks = text.split(/Question \d+:/i).slice(1);
-      questions = questionBlocks.map(qtext => {
-        const lines = qtext.split('\n').filter(l => l.trim());
-        if (lines.length < 5) return null;
+      // Extract questions - more robust parsing
+      const questionRegex = /Question \d+:\s*(.+?)(?=\n[A-D][).]\s|Correct:|Question \d+:|$)/gis;
+      const questionsText = text;
+      const questionMatches = [];
+      let match;
+      
+      // Find all question blocks
+      const questionBlocks = questionsText.split(/(?=Question \d+:)/i).filter(block => block.match(/Question \d+:/i));
+      
+      questions = questionBlocks.map(block => {
+        const lines = block.split('\n').map(l => l.trim()).filter(l => l);
         
-        const question = lines[0].trim();
-        const options = lines.slice(1, 5).map(l => l.trim().replace(/^[A-D][).]\s*/, ''));
-        const correctLine = lines.find(l => l.match(/Correct:/i));
-        const correct = correctLine ? correctLine.split(/:/i)[1]?.trim() : '';
+        // Extract question text (first line after "Question X:")
+        const questionLine = lines.find(l => l.match(/Question \d+:/i));
+        if (!questionLine) return null;
         
-        return { question, options, correct };
-      }).filter(q => q && q.question && q.correct && q.options.length === 4);
+        const questionText = questionLine.replace(/Question \d+:\s*/i, '').trim();
+        
+        // Extract options (lines starting with A), B), C), D))
+        const options = [];
+        for (const line of lines) {
+          const optionMatch = line.match(/^([A-D])[).]\s*(.+)$/i);
+          if (optionMatch) {
+            options.push(optionMatch[2].trim());
+          }
+        }
+        
+        // Extract correct answer
+        const correctLine = lines.find(l => l.match(/Correct:\s*([A-D])/i));
+        let correct = '';
+        if (correctLine) {
+          const correctMatch = correctLine.match(/Correct:\s*([A-D])/i);
+          correct = correctMatch ? correctMatch[1].toUpperCase() : '';
+        }
+        
+        if (questionText && options.length === 4 && correct) {
+          return { question: questionText, options, correct };
+        }
+        return null;
+      }).filter(q => q !== null);
 
-      if (!paragraph && !period) {
-        // Fallback: use the whole text as paragraph if parsing fails
-        paragraph = text.split(/Question \d+:/i)[0].replace(/Time Period:.*/i, '').trim();
-      }
-
-      if (paragraph || period || questions.length > 0) {
+      // Log for debugging (remove in production if needed)
+      console.log('Parsed content:', { period, paragraph: paragraph.substring(0, 50) + '...', questionsCount: questions.length });
+      
+      if (paragraph || period) {
         setContent({ period, paragraph, questions });
-        setTimerActive(true);
+        if (questions.length > 0) {
+          setTimerActive(true);
+        } else {
+          console.warn('No questions parsed from response');
+          // Still show content even if questions failed to parse
+          setTimerActive(false);
+        }
       } else {
         setError('Could not parse API response. Please try again.');
+        console.error('Full API response:', text);
       }
     } catch (e) {
       console.error('API Error:', e);
@@ -239,12 +300,13 @@ function App() {
             <h3 style={{ color: '#3498db' }}>{selectedContinent}{content.period ? `: ${content.period}` : ''}</h3>
             {timeLeft === 0 && <p style={{ color: '#c0392b', fontWeight: 'bold' }}>TIME'S UP!</p>}
             {content.paragraph ? (
-              <p style={{lineHeight: '1.6', fontSize: isMobile ? '16px' : '18px'}}>{content.paragraph}</p>
+              <p style={{lineHeight: '1.6', fontSize: isMobile ? '16px' : '18px', marginBottom: '20px'}}>{content.paragraph}</p>
             ) : !error && !loading && (
               <p style={{ color: '#888' }}>Loading content...</p>
             )}
             
-            {content.questions.map((q, i) => (
+            {content.questions && content.questions.length > 0 ? (
+              content.questions.map((q, i) => (
               <div key={i} style={{margin: '15px 0', padding: '15px', background: '#222', borderRadius: '8px'}}>
                 <p><strong>{q.question}</strong></p>
                 {q.options.map((opt, j) => {
@@ -271,7 +333,10 @@ function App() {
                   );
                 })}
               </div>
-            ))}
+              ))
+            ) : !loading && !error && content.paragraph && (
+              <p style={{ color: '#888', fontStyle: 'italic', marginTop: '20px' }}>Questions are being generated...</p>
+            )}
             {showMoveAhead && <button onClick={handleMoveAhead} style={{width: '100%', padding: '15px', background: '#0d6efd', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold', marginBottom: '20px'}}>Next Era →</button>}
           </div>
         ) : <p style={{ color: '#888' }}>Select a continent on the globe below to begin.</p>}
