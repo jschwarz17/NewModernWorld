@@ -131,11 +131,15 @@ Correct: [A, B, C, or D]`;
 
     try {
       const res = await axios.post('https://api.x.ai/v1/chat/completions', {
-        model: 'grok-4-1-fast-non-reasoning',
+        model: 'grok-4-1-fast-non-reasoning', // Using grok-4-1-fast-non-reasoning model
         messages: [{ role: 'user', content: prompt }]
       }, { headers: { Authorization: `Bearer ${API_KEY}` } });
 
       const text = res?.data?.choices?.[0]?.message?.content?.trim() || '';
+      
+      // Log full response for debugging
+      console.log('Full API Response:', text);
+      console.log('Response length:', text.length);
       
       if (!text) {
         setError('No response received from API. Please try again.');
@@ -165,49 +169,61 @@ Correct: [A, B, C, or D]`;
           paragraph = text.substring(0, questionStart)
             .replace(/Time Period:.*?\n\n?/i, '')
             .trim();
+        } else {
+          // Last resort: everything after Time Period
+          paragraph = text.replace(/Time Period:.*?\n\n?/i, '').trim();
         }
       }
 
-      // Extract questions - more robust parsing
-      const questionRegex = /Question \d+:\s*(.+?)(?=\n[A-D][).]\s|Correct:|Question \d+:|$)/gis;
-      const questionsText = text;
-      const questionMatches = [];
-      let match;
+      // Improved question extraction - handle multiple formats
+      // Method 1: Split by "Question" keyword
+      const questionSections = text.split(/(?=Question \d+:)/i).filter(section => 
+        section.trim().match(/Question \d+:/i)
+      );
       
-      // Find all question blocks
-      const questionBlocks = questionsText.split(/(?=Question \d+:)/i).filter(block => block.match(/Question \d+:/i));
+      console.log('Found question sections:', questionSections.length);
       
-      questions = questionBlocks.map(block => {
-        const lines = block.split('\n').map(l => l.trim()).filter(l => l);
+      questions = questionSections.map((section, idx) => {
+        const lines = section.split(/\n/).map(l => l.trim()).filter(l => l && !l.match(/^Time Period:/i));
         
-        // Extract question text (first line after "Question X:")
-        const questionLine = lines.find(l => l.match(/Question \d+:/i));
-        if (!questionLine) return null;
-        
-        const questionText = questionLine.replace(/Question \d+:\s*/i, '').trim();
-        
-        // Extract options (lines starting with A), B), C), D))
-        const options = [];
-        for (const line of lines) {
-          const optionMatch = line.match(/^([A-D])[).]\s*(.+)$/i);
-          if (optionMatch) {
-            options.push(optionMatch[2].trim());
-          }
+        // Find question text - line with "Question X:"
+        let questionText = '';
+        const questionLineIndex = lines.findIndex(l => l.match(/Question \d+:/i));
+        if (questionLineIndex >= 0) {
+          questionText = lines[questionLineIndex].replace(/Question \d+:\s*/i, '').trim();
         }
+        
+        // Extract all options (A), B), C), D))
+        const options = [];
+        const optionLines = lines.filter(l => l.match(/^[A-D][).]\s/));
+        optionLines.forEach(line => {
+          const match = line.match(/^[A-D][).]\s*(.+)$/i);
+          if (match) {
+            options.push(match[1].trim());
+          }
+        });
         
         // Extract correct answer
-        const correctLine = lines.find(l => l.match(/Correct:\s*([A-D])/i));
         let correct = '';
+        const correctLine = lines.find(l => l.match(/Correct:\s*([A-D])/i));
         if (correctLine) {
-          const correctMatch = correctLine.match(/Correct:\s*([A-D])/i);
-          correct = correctMatch ? correctMatch[1].toUpperCase() : '';
+          const match = correctLine.match(/Correct:\s*([A-D])/i);
+          correct = match ? match[1].toUpperCase() : '';
         }
         
-        if (questionText && options.length === 4 && correct) {
-          return { question: questionText, options, correct };
+        console.log(`Question ${idx + 1}:`, { questionText, optionsCount: options.length, correct });
+        
+        if (questionText && options.length >= 4 && correct) {
+          return { 
+            question: questionText, 
+            options: options.slice(0, 4), // Ensure exactly 4 options
+            correct 
+          };
         }
         return null;
-      }).filter(q => q !== null);
+      }).filter(q => q !== null && q.question && q.options.length === 4 && q.correct);
+      
+      console.log('Final parsed questions:', questions.length, questions);
 
       // Log for debugging (remove in production if needed)
       console.log('Parsed content:', { period, paragraph: paragraph.substring(0, 50) + '...', questionsCount: questions.length });
