@@ -7,6 +7,7 @@ const API_KEY = import.meta.env.VITE_GROK_PART1 + import.meta.env.VITE_GROK_PART
 const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'];
 
 function App() {
+  console.log('App component loaded');
   const [geoData, setGeoData] = useState(null);
   const [selectedContinent, setSelectedContinent] = useState(null);
   const [content, setContent] = useState({ period: '', paragraph: '', questions: [] });
@@ -73,7 +74,9 @@ function App() {
 
   const handleContinentClick = (polygon) => {
     const continent = polygon.properties?.CONTINENT || polygon.properties?.continent || polygon.properties?.REGION_UN;
+    console.log('Continent clicked:', continent);
     if (continent && CONTINENTS.includes(continent)) {
+      console.log('Valid continent, fetching history...');
       setSelectedContinent(continent);
       setAnswers({});
       setShowMoveAhead(false);
@@ -85,16 +88,21 @@ function App() {
       
       // On mobile, scroll up to the text area automatically
       if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      console.log('Invalid continent or not in CONTINENTS list:', continent);
     }
   };
 
   const fetchHistory = async (year, continentName) => {
+    console.log('fetchHistory called with:', { year, continentName });
     setLoading(true);
     setError(null);
     const endYear = year + 50;
     
     // Check if API key is available
+    console.log('API_KEY check:', API_KEY ? 'Present' : 'Missing', API_KEY?.substring(0, 10) + '...');
     if (!API_KEY || API_KEY === 'undefinedundefined') {
+      console.error('API key not configured!');
       setError('API key not configured. Please check your environment variables.');
       setLoading(false);
       return;
@@ -130,10 +138,12 @@ D) [Option D]
 Correct: [A, B, C, or D]`;
 
     try {
+      console.log('Making API call to grok-4-1-fast-non-reasoning...');
       const res = await axios.post('https://api.x.ai/v1/chat/completions', {
         model: 'grok-4-1-fast-non-reasoning', // Using grok-4-1-fast-non-reasoning model
         messages: [{ role: 'user', content: prompt }]
       }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+      console.log('API call successful, status:', res.status);
 
       const text = res?.data?.choices?.[0]?.message?.content?.trim() || '';
       
