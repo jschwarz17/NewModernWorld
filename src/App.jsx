@@ -15,6 +15,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(60); 
   const [timerActive, setTimerActive] = useState(false);
+  const [error, setError] = useState(null);
   
   // Track if we are on mobile (less than 768px wide)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -79,6 +80,7 @@ function App() {
       setTimeLeft(60);
       setTimerActive(false);
       setContent({ period: '', paragraph: '', questions: [] });
+      setError(null);
       fetchHistory(progress[continent] || 1500, continent);
       
       // On mobile, scroll up to the text area automatically
@@ -88,7 +90,16 @@ function App() {
 
   const fetchHistory = async (year, continentName) => {
     setLoading(true);
+    setError(null);
     const endYear = year + 50;
+    
+    // Check if API key is available
+    if (!API_KEY || API_KEY === 'undefinedundefined') {
+      setError('API key not configured. Please check your environment variables.');
+      setLoading(false);
+      return;
+    }
+
     const prompt = `You are a world-class historian. Write a short factual paragraph about historical events in ${continentName} strictly between ${year} and ${endYear}. Format strictly with: Time Period: ${year}-${endYear}, [paragraph], and 3 Multiple Choice Questions with A/B/C/D and Correct: [letter].`;
 
     try {
@@ -98,20 +109,66 @@ function App() {
       }, { headers: { Authorization: `Bearer ${API_KEY}` } });
 
       const text = res?.data?.choices?.[0]?.message?.content?.trim() || '';
-      const parts = text.split(/\n\n+/);
-      const period = (parts[0] || '').replace('Time Period: ', '').trim();
-      const paragraph = (parts[1] || '').trim();
-      const questions = parts.slice(2).map(qtext => {
-        const lines = qtext.split('\n');
-        const question = (lines[0] || '').replace(/^Question \d+: /, '').trim();
-        const options = lines.slice(1, 5).map(l => l.trim().replace(/^[A-D]\)\s*/, ''));
-        const correct = (lines.find(l => l.startsWith('Correct:')) || '').split(':')[1]?.trim();
-        return { question, options, correct };
-      }).filter(q => q.question && q.correct);
+      
+      if (!text) {
+        setError('No response received from API. Please try again.');
+        setLoading(false);
+        return;
+      }
 
-      setContent({ period, paragraph, questions });
-      setTimerActive(true);
-    } catch (e) { console.error(e); }
+      // More flexible parsing - handle different formats
+      let period = '';
+      let paragraph = '';
+      let questions = [];
+
+      // Try to extract time period
+      const periodMatch = text.match(/Time Period:\s*(\d+-\d+)/i);
+      if (periodMatch) {
+        period = periodMatch[1];
+      }
+
+      // Split by double newlines or look for paragraph
+      const parts = text.split(/\n\n+/);
+      
+      // Find the paragraph (usually after time period, before questions)
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i].trim();
+        if (part && !part.match(/^Time Period:/i) && !part.match(/^Question \d+:/i) && !part.match(/^[A-D]\)/)) {
+          paragraph = part;
+          break;
+        }
+      }
+
+      // Extract questions
+      const questionBlocks = text.split(/Question \d+:/i).slice(1);
+      questions = questionBlocks.map(qtext => {
+        const lines = qtext.split('\n').filter(l => l.trim());
+        if (lines.length < 5) return null;
+        
+        const question = lines[0].trim();
+        const options = lines.slice(1, 5).map(l => l.trim().replace(/^[A-D][).]\s*/, ''));
+        const correctLine = lines.find(l => l.match(/Correct:/i));
+        const correct = correctLine ? correctLine.split(/:/i)[1]?.trim() : '';
+        
+        return { question, options, correct };
+      }).filter(q => q && q.question && q.correct && q.options.length === 4);
+
+      if (!paragraph && !period) {
+        // Fallback: use the whole text as paragraph if parsing fails
+        paragraph = text.split(/Question \d+:/i)[0].replace(/Time Period:.*/i, '').trim();
+      }
+
+      if (paragraph || period || questions.length > 0) {
+        setContent({ period, paragraph, questions });
+        setTimerActive(true);
+      } else {
+        setError('Could not parse API response. Please try again.');
+      }
+    } catch (e) {
+      console.error('API Error:', e);
+      const errorMessage = e.response?.data?.error?.message || e.message || 'Failed to fetch history. Please check your API key and try again.';
+      setError(errorMessage);
+    }
     setLoading(false);
   };
 
@@ -170,9 +227,22 @@ function App() {
 
         {loading ? <p>Loading Era...</p> : selectedContinent ? (
           <div>
-            <h3 style={{ color: '#3498db' }}>{selectedContinent}: {content.period}</h3>
+            {error && (
+              <div style={{ padding: '15px', background: '#c0392b', borderRadius: '8px', marginBottom: '15px' }}>
+                <p style={{ color: '#fff', fontWeight: 'bold', margin: 0 }}>Error: {error}</p>
+                <button onClick={() => fetchHistory(progress[selectedContinent] || 1500, selectedContinent)} 
+                  style={{ marginTop: '10px', padding: '8px 15px', background: '#fff', color: '#c0392b', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                  Retry
+                </button>
+              </div>
+            )}
+            <h3 style={{ color: '#3498db' }}>{selectedContinent}{content.period ? `: ${content.period}` : ''}</h3>
             {timeLeft === 0 && <p style={{ color: '#c0392b', fontWeight: 'bold' }}>TIME'S UP!</p>}
-            <p style={{lineHeight: '1.6', fontSize: isMobile ? '16px' : '18px'}}>{content.paragraph}</p>
+            {content.paragraph ? (
+              <p style={{lineHeight: '1.6', fontSize: isMobile ? '16px' : '18px'}}>{content.paragraph}</p>
+            ) : !error && !loading && (
+              <p style={{ color: '#888' }}>Loading content...</p>
+            )}
             
             {content.questions.map((q, i) => (
               <div key={i} style={{margin: '15px 0', padding: '15px', background: '#222', borderRadius: '8px'}}>
