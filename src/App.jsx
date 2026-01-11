@@ -331,6 +331,20 @@ Correct: [A, B, C, or D]`;
               <p style={{ color: '#888' }}>Loading content...</p>
             )}
             
+            {/* Debug info - remove after fixing */}
+            {process.env.NODE_ENV === 'development' && (
+              <div style={{ padding: '10px', background: '#333', borderRadius: '4px', marginBottom: '15px', fontSize: '12px' }}>
+                <strong>Debug:</strong> Questions found: {content.questions?.length || 0}
+                {content.questions?.length > 0 && (
+                  <div style={{ marginTop: '5px' }}>
+                    {content.questions.map((q, idx) => (
+                      <div key={idx}>Q{idx + 1}: {q.question?.substring(0, 30)}... ({q.options?.length} options, correct: {q.correct})</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
             {content.questions && content.questions.length > 0 ? (
               content.questions.map((q, i) => (
               <div key={i} style={{margin: '15px 0', padding: '15px', background: '#222', borderRadius: '8px'}}>
@@ -361,7 +375,12 @@ Correct: [A, B, C, or D]`;
               </div>
               ))
             ) : !loading && !error && content.paragraph && (
-              <p style={{ color: '#888', fontStyle: 'italic', marginTop: '20px' }}>Questions are being generated...</p>
+              <div style={{ marginTop: '20px', padding: '15px', background: '#222', borderRadius: '8px' }}>
+                <p style={{ color: '#888', fontStyle: 'italic' }}>Questions are being generated...</p>
+                <p style={{ color: '#c0392b', fontSize: '12px', marginTop: '10px' }}>
+                  Debug: No questions found. Check console (F12) for API response details.
+                </p>
+              </div>
             )}
             {showMoveAhead && <button onClick={handleMoveAhead} style={{width: '100%', padding: '15px', background: '#0d6efd', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold', marginBottom: '20px'}}>Next Era →</button>}
           </div>
