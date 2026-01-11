@@ -341,26 +341,27 @@ Correct: [A, B, C, or D]`;
                 Questions found: <strong style={{ fontSize: '18px' }}>{content.questions?.length || 0}</strong>
               </div>
               <div style={{ marginTop: '10px', padding: '10px', background: '#333', borderRadius: '4px' }}>
-              <strong style={{ color: '#3498db' }}>Debug Info:</strong>
-              <div style={{ marginTop: '5px', color: '#fff' }}>
-                Questions found: <strong>{content.questions?.length || 0}</strong>
-              </div>
-              {content.questions && content.questions.length > 0 ? (
-                <div style={{ marginTop: '10px' }}>
-                  {content.questions.map((q, idx) => (
-                    <div key={idx} style={{ marginBottom: '5px', padding: '5px', background: '#222' }}>
-                      <div>Q{idx + 1}: {q.question?.substring(0, 50)}...</div>
-                      <div style={{ fontSize: '11px', color: '#aaa' }}>
-                        Options: {q.options?.length || 0}, Correct: {q.correct || 'N/A'}
+                <strong style={{ color: '#3498db' }}>Debug Info:</strong>
+                <div style={{ marginTop: '5px', color: '#fff' }}>
+                  Questions found: <strong>{content.questions?.length || 0}</strong>
+                </div>
+                {content.questions && content.questions.length > 0 ? (
+                  <div style={{ marginTop: '10px' }}>
+                    {content.questions.map((q, idx) => (
+                      <div key={idx} style={{ marginBottom: '5px', padding: '5px', background: '#222' }}>
+                        <div>Q{idx + 1}: {q.question?.substring(0, 50)}...</div>
+                        <div style={{ fontSize: '11px', color: '#aaa' }}>
+                          Options: {q.options?.length || 0}, Correct: {q.correct || 'N/A'}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ marginTop: '5px', color: '#c0392b' }}>
-                  No questions parsed. Check browser console (F12) for API response.
-                </div>
-              )}
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: '5px', color: '#c0392b' }}>
+                    No questions parsed. Check browser console (F12) for API response.
+                  </div>
+                )}
+              </div>
             </div>
             
             {content.questions && content.questions.length > 0 ? (
