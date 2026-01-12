@@ -7,6 +7,7 @@ const API_KEY = import.meta.env.VITE_GROK_PART1 + import.meta.env.VITE_GROK_PART
 const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'];
 
 function App() {
+  console.log('🚀 App component loaded!');
   const [geoData, setGeoData] = useState(null);
   const [selectedContinent, setSelectedContinent] = useState(null);
   const [content, setContent] = useState({ period: '', paragraph: '', questions: [] });
@@ -57,7 +58,16 @@ function App() {
   }, [isMobile]);
 
   useEffect(() => {
-    fetch(GEO_URL).then(res => res.json()).then(data => setGeoData(data));
+    console.log('🌍 Fetching geo data from:', GEO_URL);
+    fetch(GEO_URL)
+      .then(res => res.json())
+      .then(data => {
+        console.log('✅ Geo data loaded, features:', data.features?.length);
+        setGeoData(data);
+      })
+      .catch(err => {
+        console.error('❌ Error loading geo data:', err);
+      });
   }, []);
 
   const getPolygonColor = (d) => {
@@ -329,15 +339,22 @@ function App() {
         height: isMobile ? '50vh' : '100vh',
         backgroundColor: '#000'
       }}>
-        <Globe 
-          width={dimensions.width} 
-          height={dimensions.height} 
-          globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
-          backgroundColor="#000" 
-          polygonsData={geoData.features} 
-          polygonCapColor={getPolygonColor} 
-          onPolygonClick={handleContinentClick} 
-        />
+        {geoData && geoData.features ? (
+          <Globe 
+            width={dimensions.width} 
+            height={dimensions.height} 
+            globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
+            backgroundColor="#000" 
+            polygonsData={geoData.features} 
+            polygonCapColor={getPolygonColor} 
+            onPolygonClick={(polygon) => {
+              console.log('🌐 Globe onPolygonClick triggered!', polygon);
+              handleContinentClick(polygon);
+            }} 
+          />
+        ) : (
+          <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
+        )}
       </div>
     </div>
   );
