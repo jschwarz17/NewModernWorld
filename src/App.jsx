@@ -69,8 +69,14 @@ function App() {
   };
 
   const handleContinentClick = (polygon) => {
+    console.log('🔵 Continent clicked!', polygon);
     const continent = polygon.properties?.CONTINENT || polygon.properties?.continent || polygon.properties?.REGION_UN;
+    console.log('🔵 Extracted continent:', continent);
+    console.log('🔵 Valid continents:', CONTINENTS);
+    console.log('🔵 Is valid?', continent && CONTINENTS.includes(continent));
+    
     if (continent && CONTINENTS.includes(continent)) {
+      console.log('✅ Valid continent selected, calling fetchHistory...');
       setSelectedContinent(continent);
       setAnswers({});
       setShowMoveAhead(false);
@@ -78,21 +84,29 @@ function App() {
       setTimerActive(false);
       setContent({ period: '', paragraph: '', questions: [] });
       setError(null);
-      fetchHistory(progress[continent] || 1500, continent);
+      const year = progress[continent] || 1500;
+      console.log('🔵 Calling fetchHistory with:', { year, continent });
+      fetchHistory(year, continent);
       if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      console.warn('❌ Invalid continent or not in list:', continent);
     }
   };
 
   const fetchHistory = async (year, continentName) => {
+    console.log('🚀 fetchHistory called with:', { year, continentName });
     setLoading(true);
     setError(null);
     const endYear = year + 50;
 
+    console.log('🔑 API_KEY check:', API_KEY ? 'Present' : 'Missing', API_KEY?.substring(0, 10) + '...');
     if (!API_KEY || API_KEY.includes('undefined')) {
+      console.error('❌ API key not configured!');
       setError('API key not configured properly.');
       setLoading(false);
       return;
     }
+    console.log('✅ API key is present, proceeding with API call...');
 
     // UPDATED PROMPT: Requesting structured JSON
     const prompt = `You are a world-class historian. Write a factual paragraph (exactly 150 words) about historical events in ${continentName} between ${year} and ${endYear}. 
