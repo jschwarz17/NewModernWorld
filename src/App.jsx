@@ -7,7 +7,6 @@ const API_KEY = import.meta.env.VITE_GROK_PART1 + import.meta.env.VITE_GROK_PART
 const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'];
 
 function App() {
-  console.log('App component loaded');
   const [geoData, setGeoData] = useState(null);
   const [selectedContinent, setSelectedContinent] = useState(null);
   const [content, setContent] = useState({ period: '', paragraph: '', questions: [] });
@@ -17,8 +16,6 @@ function App() {
   const [timeLeft, setTimeLeft] = useState(60); 
   const [timerActive, setTimerActive] = useState(false);
   const [error, setError] = useState(null);
-  
-  // Track if we are on mobile (less than 768px wide)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const [progress, setProgress] = useState(() => {
@@ -41,7 +38,6 @@ function App() {
     return () => clearInterval(timer);
   }, [timerActive, timeLeft]);
 
-  // Updated sizing logic for responsive layout
   const [dimensions, setDimensions] = useState({
     width: isMobile ? window.innerWidth : window.innerWidth / 2,
     height: isMobile ? window.innerHeight / 2 : window.innerHeight
@@ -74,9 +70,7 @@ function App() {
 
   const handleContinentClick = (polygon) => {
     const continent = polygon.properties?.CONTINENT || polygon.properties?.continent || polygon.properties?.REGION_UN;
-    console.log('Continent clicked:', continent);
     if (continent && CONTINENTS.includes(continent)) {
-      console.log('Valid continent, fetching history...');
       setSelectedContinent(continent);
       setAnswers({});
       setShowMoveAhead(false);
@@ -85,216 +79,62 @@ function App() {
       setContent({ period: '', paragraph: '', questions: [] });
       setError(null);
       fetchHistory(progress[continent] || 1500, continent);
-      
-      // On mobile, scroll up to the text area automatically
       if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      console.log('Invalid continent or not in CONTINENTS list:', continent);
     }
   };
 
   const fetchHistory = async (year, continentName) => {
-    console.log('fetchHistory called with:', { year, continentName });
     setLoading(true);
     setError(null);
     const endYear = year + 50;
-    
-    // Check if API key is available
-    console.log('API_KEY check:', API_KEY ? 'Present' : 'Missing', API_KEY?.substring(0, 10) + '...');
-    if (!API_KEY || API_KEY === 'undefinedundefined') {
-      console.error('API key not configured!');
-      setError('API key not configured. Please check your environment variables.');
+
+    if (!API_KEY || API_KEY.includes('undefined')) {
+      setError('API key not configured properly.');
       setLoading(false);
       return;
     }
 
-    const prompt = `You are a world-class historian. Write a factual paragraph (exactly 150 words) about historical events in ${continentName} strictly between ${year} and ${endYear}. 
-
-Format your response EXACTLY as follows:
-
-Time Period: ${year}-${endYear}
-
-[Your 150-word paragraph here]
-
-Question 1: [Question text]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Correct: [A, B, C, or D]
-
-Question 2: [Question text]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Correct: [A, B, C, or D]
-
-Question 3: [Question text]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Correct: [A, B, C, or D]`;
+    // UPDATED PROMPT: Requesting structured JSON
+    const prompt = `You are a world-class historian. Write a factual paragraph (exactly 150 words) about historical events in ${continentName} between ${year} and ${endYear}. 
+    
+    Return ONLY a JSON object with this exact structure:
+    {
+      "period": "${year}-${endYear}",
+      "paragraph": "Your 150-word history paragraph here",
+      "questions": [
+        {
+          "question": "Question text?",
+          "options": ["Option A", "Option B", "Option C", "Option D"],
+          "correct": "A"
+        }
+      ]
+    }
+    Include exactly 3 questions. Do not include any text outside of the JSON object.`;
 
     try {
-      console.log('Making API call to grok-4-1-fast-non-reasoning...');
       const res = await axios.post('https://api.x.ai/v1/chat/completions', {
-        model: 'grok-4-1-fast-non-reasoning', // Using grok-4-1-fast-non-reasoning model
+        model: 'grok-4-1-fast-non-reasoning',
         messages: [{ role: 'user', content: prompt }]
       }, { headers: { Authorization: `Bearer ${API_KEY}` } });
-      console.log('API call successful, status:', res.status);
 
-      const text = res?.data?.choices?.[0]?.message?.content?.trim() || '';
+      let rawText = res?.data?.choices?.[0]?.message?.content?.trim() || '';
       
-      // Log full response for debugging
-      console.log('=== FULL API RESPONSE ===');
-      console.log(text);
-      console.log('Response length:', text.length);
-      console.log('=== END API RESPONSE ===');
-      
-      if (!text) {
-        setError('No response received from API. Please try again.');
-        setLoading(false);
-        return;
-      }
+      // Remove potential markdown code blocks if the AI adds them
+      const cleanJson = rawText.replace(/```json|```/g, '').trim();
+      const data = JSON.parse(cleanJson);
 
-      // Parse the response
-      let period = '';
-      let paragraph = '';
-      let questions = [];
+      setContent({
+        period: data.period || `${year}-${endYear}`,
+        paragraph: data.paragraph || '',
+        questions: data.questions || []
+      });
 
-      // Extract time period
-      const periodMatch = text.match(/Time Period:\s*(\d+-\d+)/i);
-      if (periodMatch) {
-        period = periodMatch[1];
-      }
-
-      // Extract paragraph - everything between Time Period and first Question
-      const paragraphMatch = text.match(/Time Period:.*?\n\n(.*?)(?=\n\nQuestion \d+:|$)/is);
-      if (paragraphMatch) {
-        paragraph = paragraphMatch[1].trim();
-      } else {
-        // Fallback: get text between Time Period and first Question
-        const questionStart = text.search(/Question \d+:/i);
-        if (questionStart > 0) {
-          paragraph = text.substring(0, questionStart)
-            .replace(/Time Period:.*?\n\n?/i, '')
-            .trim();
-        } else {
-          // Last resort: everything after Time Period
-          paragraph = text.replace(/Time Period:.*?\n\n?/i, '').trim();
-        }
-      }
-
-      // Ultra-flexible question extraction - handle ANY format
-      // Try multiple methods to find questions
-      
-      // Method 1: Look for "Question" followed by number
-      let questionBlocks = text.split(/(?=Question\s*\d+[:\s])/i);
-      if (questionBlocks.length < 2) {
-        // Method 2: Look for numbered questions (1., 2., 3.)
-        questionBlocks = text.split(/(?=\d+\.\s*[A-Z])/i);
-      }
-      if (questionBlocks.length < 2) {
-        // Method 3: Look for lines starting with Q1, Q2, Q3
-        questionBlocks = text.split(/(?=Q\d+[:\s])/i);
-      }
-      
-      questions = [];
-      
-      // Process each potential question block
-      for (let i = 0; i < questionBlocks.length; i++) {
-        const block = questionBlocks[i];
-        if (!block || block.trim().length < 20) continue; // Skip tiny blocks
-        
-        const lines = block.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
-        if (lines.length < 5) continue; // Need at least question + 4 options
-        
-        let questionText = '';
-        const options = [];
-        let correct = '';
-        
-        // Find question text - could be "Question 1:", "1.", "Q1:", etc.
-        for (const line of lines) {
-          const qMatch = line.match(/(?:Question\s*\d+[:\s]|Q\d+[:\s]|\d+\.\s*)(.+)/i);
-          if (qMatch && !questionText) {
-            questionText = qMatch[1].trim();
-            break;
-          }
-        }
-        
-        // If no question found with pattern, use first substantial line
-        if (!questionText && lines[0] && lines[0].length > 10 && !lines[0].match(/^[A-D][).]/)) {
-          questionText = lines[0];
-        }
-        
-        // Extract options - look for A), B), C), D) or A., B., C., D.
-        for (const line of lines) {
-          const optMatch = line.match(/^([A-D])[).]\s*(.+)$/i);
-          if (optMatch) {
-            const letter = optMatch[1].toUpperCase();
-            const text = optMatch[2].trim();
-            if (text.length > 0) {
-              options.push(text);
-            }
-          }
-        }
-        
-        // Extract correct answer - look for "Correct: A" or "Answer: B" etc.
-        for (const line of lines) {
-          const correctMatch = line.match(/(?:Correct|Answer)[:\s]+([A-D])/i);
-          if (correctMatch) {
-            correct = correctMatch[1].toUpperCase();
-            break;
-          }
-        }
-        
-        // If we have question and at least 3 options, accept it (we'll pad if needed)
-        if (questionText && options.length >= 3) {
-          // Pad to 4 options if needed
-          while (options.length < 4) {
-            options.push('Option ' + (options.length + 1));
-          }
-          
-          // If no correct answer found, default to A
-          if (!correct) {
-            correct = 'A';
-          }
-          
-          questions.push({
-            question: questionText,
-            options: options.slice(0, 4),
-            correct: correct
-          });
-        }
-      }
-      
-      // Limit to 3 questions max
-      questions = questions.slice(0, 3);
-      
-      console.log('Final parsed questions:', questions.length, questions);
-
-      // Log for debugging (remove in production if needed)
-      console.log('Parsed content:', { period, paragraph: paragraph.substring(0, 50) + '...', questionsCount: questions.length });
-      
-      if (paragraph || period) {
-        setContent({ period, paragraph, questions });
-        if (questions.length > 0) {
-          setTimerActive(true);
-        } else {
-          console.warn('No questions parsed from response');
-          // Still show content even if questions failed to parse
-          setTimerActive(false);
-        }
-      } else {
-        setError('Could not parse API response. Please try again.');
-        console.error('Full API response:', text);
+      if (data.questions?.length > 0) {
+        setTimerActive(true);
       }
     } catch (e) {
-      console.error('API Error:', e);
-      const errorMessage = e.response?.data?.error?.message || e.message || 'Failed to fetch history. Please check your API key and try again.';
-      setError(errorMessage);
+      console.error('API or Parsing Error:', e);
+      setError('Failed to load or parse history data. Please try again.');
     }
     setLoading(false);
   };
@@ -320,22 +160,22 @@ Correct: [A, B, C, or D]`;
     fetchHistory(nextYear, selectedContinent);
   };
 
-  if (!geoData) return <div style={{background: '#000', color: '#fff', height: '100vh', padding: '20px'}}>Loading...</div>;
+  if (!geoData) return <div style={{background: '#000', color: '#fff', height: '100vh', padding: '20px'}}>Loading Map...</div>;
 
   return (
     <div style={{ 
       display: 'flex', 
-      flexDirection: isMobile ? 'column' : 'row', // Stacks on mobile
+      flexDirection: isMobile ? 'column' : 'row', 
       height: '100vh', 
       width: '100vw', 
       backgroundColor: '#000', 
       overflowX: 'hidden' 
     }}>
-      {/* LEFT/TOP: QUIZ PANEL */}
+      {/* LEFT PANEL: CONTENT */}
       <div style={{ 
         width: isMobile ? '100vw' : '50vw', 
         height: isMobile ? 'auto' : '100vh',
-        padding: '20px', 
+        padding: '30px',
         overflowY: 'auto', 
         backgroundColor: '#111', 
         color: '#fff', 
@@ -343,11 +183,8 @@ Correct: [A, B, C, or D]`;
         borderRight: isMobile ? 'none' : '2px solid #333',
         boxSizing: 'border-box' 
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1 style={{fontSize: isMobile ? '20px' : '24px'}}>History Explorer</h1>
-          <div style={{ padding: '5px 10px', background: '#ff0000', color: '#fff', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
-            CODE vf9b8e11 RUNNING
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h1 style={{fontSize: isMobile ? '20px' : '24px', margin: 0}}>History Explorer</h1>
           {timerActive && (
             <div style={{ padding: '8px 15px', backgroundColor: timeLeft < 10 ? '#c0392b' : '#333', borderRadius: '20px', fontWeight: 'bold' }}>
               ⏱ {timeLeft}s
@@ -355,7 +192,9 @@ Correct: [A, B, C, or D]`;
           )}
         </div>
 
-        {loading ? <p>Loading Era...</p> : selectedContinent ? (
+        {loading ? (
+          <p>Loading Era...</p>
+        ) : selectedContinent ? (
           <div>
             {error && (
               <div style={{ padding: '15px', background: '#c0392b', borderRadius: '8px', marginBottom: '15px' }}>
@@ -366,87 +205,65 @@ Correct: [A, B, C, or D]`;
                 </button>
               </div>
             )}
-            <h3 style={{ color: '#3498db' }}>{selectedContinent}{content.period ? `: ${content.period}` : ''}</h3>
-            {timeLeft === 0 && <p style={{ color: '#c0392b', fontWeight: 'bold' }}>TIME'S UP!</p>}
+            <h3 style={{ color: '#3498db', marginBottom: '20px' }}>{selectedContinent}{content.period ? `: ${content.period}` : ''}</h3>
+            {timeLeft === 0 && <p style={{ color: '#c0392b', fontWeight: 'bold', marginBottom: '15px' }}>TIME'S UP!</p>}
             {content.paragraph ? (
-              <p style={{lineHeight: '1.6', fontSize: isMobile ? '16px' : '18px', marginBottom: '20px'}}>{content.paragraph}</p>
+              <p style={{lineHeight: '1.6', fontSize: isMobile ? '16px' : '18px', marginBottom: '30px'}}>{content.paragraph}</p>
             ) : !error && !loading && (
               <p style={{ color: '#888' }}>Loading content...</p>
             )}
             
-            {/* Debug info - always visible - TEST VERSION */}
-            <div style={{ padding: '15px', background: '#ff6b6b', borderRadius: '8px', marginBottom: '15px', fontSize: '14px', border: '2px solid #fff', color: '#fff' }}>
-              <strong>🔍 DEBUG BOX - IF YOU SEE THIS, CODE IS RUNNING</strong>
-              <div style={{ marginTop: '10px' }}>
-                Questions found: <strong style={{ fontSize: '18px' }}>{content.questions?.length || 0}</strong>
-              </div>
-              <div style={{ marginTop: '10px', padding: '10px', background: '#333', borderRadius: '4px' }}>
-                <strong style={{ color: '#3498db' }}>Debug Info:</strong>
-                <div style={{ marginTop: '5px', color: '#fff' }}>
-                  Questions found: <strong>{content.questions?.length || 0}</strong>
-                </div>
-                {content.questions && content.questions.length > 0 ? (
-                  <div style={{ marginTop: '10px' }}>
-                    {content.questions.map((q, idx) => (
-                      <div key={idx} style={{ marginBottom: '5px', padding: '5px', background: '#222' }}>
-                        <div>Q{idx + 1}: {q.question?.substring(0, 50)}...</div>
-                        <div style={{ fontSize: '11px', color: '#aaa' }}>
-                          Options: {q.options?.length || 0}, Correct: {q.correct || 'N/A'}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ marginTop: '5px', color: '#c0392b' }}>
-                    No questions parsed. Check browser console (F12) for API response.
-                  </div>
-                )}
-              </div>
-            </div>
-            
             {content.questions && content.questions.length > 0 ? (
               content.questions.map((q, i) => (
-              <div key={i} style={{margin: '15px 0', padding: '15px', background: '#222', borderRadius: '8px'}}>
-                <p><strong>{q.question}</strong></p>
-                {q.options.map((opt, j) => {
-                  const letter = ['A', 'B', 'C', 'D'][j];
-                  const ans = answers[i];
-                  const isAnswered = !!ans;
-                  const isCorrectBtn = letter === q.correct;
-                  const isSelectedBtn = ans?.selected === letter;
+                <div key={i} style={{margin: '20px 0', padding: '20px', background: '#222', borderRadius: '8px'}}>
+                  <p style={{fontSize: '18px', fontWeight: 'bold', marginBottom: '15px'}}>{q.question}</p>
+                  {q.options.map((opt, j) => {
+                    const letter = ['A', 'B', 'C', 'D'][j];
+                    const ans = answers[i];
+                    const isAnswered = !!ans;
+                    const isCorrectBtn = letter === q.correct;
+                    const isSelectedBtn = ans?.selected === letter;
 
-                  let btnColor = '#333';
-                  if (isAnswered || timeLeft === 0) {
-                    if (isCorrectBtn) btnColor = '#27ae60';
-                    else if (isSelectedBtn && !ans.isCorrect) btnColor = '#c0392b';
-                  }
+                    let btnColor = '#333';
+                    if (isAnswered || timeLeft === 0) {
+                      if (isCorrectBtn) btnColor = '#27ae60';
+                      else if (isSelectedBtn && !ans.isCorrect) btnColor = '#c0392b';
+                    }
 
-                  return (
-                    <button key={j} onClick={() => handleAnswer(i, letter)} disabled={isAnswered || timeLeft === 0} style={{
-                      display: 'block', width: '100%', textAlign: 'left', margin: '8px 0', padding: '12px',
-                      background: btnColor, color: '#fff', border: 'none', borderRadius: '6px', 
-                      fontSize: '14px', cursor: (isAnswered || timeLeft === 0) ? 'default' : 'pointer'
-                    }}>
-                      {letter}) {opt} {isAnswered && isCorrectBtn && ' ✓'} {isSelectedBtn && !ans.isCorrect && ' ✗'}
-                    </button>
-                  );
-                })}
-              </div>
+                    return (
+                      <button key={j} onClick={() => handleAnswer(i, letter)} disabled={isAnswered || timeLeft === 0} style={{
+                        display: 'block', width: '100%', textAlign: 'left', margin: '10px 0', padding: '15px',
+                        background: btnColor, color: '#fff', border: 'none', borderRadius: '6px', 
+                        fontSize: '16px', cursor: (isAnswered || timeLeft === 0) ? 'default' : 'pointer',
+                        transition: 'background 0.2s'
+                      }}>
+                        {letter}) {opt} {isAnswered && isCorrectBtn && ' ✓'} {isSelectedBtn && !ans.isCorrect && ' ✗'}
+                      </button>
+                    );
+                  })}
+                </div>
               ))
             ) : !loading && !error && content.paragraph && (
               <div style={{ marginTop: '20px', padding: '15px', background: '#222', borderRadius: '8px' }}>
                 <p style={{ color: '#888', fontStyle: 'italic' }}>Questions are being generated...</p>
-                <p style={{ color: '#c0392b', fontSize: '12px', marginTop: '10px' }}>
-                  Debug: No questions found. Check console (F12) for API response details.
-                </p>
               </div>
             )}
-            {showMoveAhead && <button onClick={handleMoveAhead} style={{width: '100%', padding: '15px', background: '#0d6efd', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold', marginBottom: '20px'}}>Next Era →</button>}
+            {showMoveAhead && (
+              <button onClick={handleMoveAhead} style={{
+                width: '100%', padding: '15px', background: '#0d6efd', color: '#fff', 
+                border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', 
+                fontWeight: 'bold', marginTop: '20px', marginBottom: '20px'
+              }}>
+                Next Era →
+              </button>
+            )}
           </div>
-        ) : <p style={{ color: '#888' }}>Select a continent on the globe below to begin.</p>}
+        ) : (
+          <p style={{ color: '#888' }}>Select a continent on the globe to begin.</p>
+        )}
       </div>
 
-      {/* RIGHT/BOTTOM: GLOBE PANEL */}
+      {/* RIGHT PANEL: GLOBE */}
       <div style={{ 
         width: isMobile ? '100vw' : '50vw', 
         height: isMobile ? '50vh' : '100vh',
