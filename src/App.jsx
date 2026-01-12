@@ -187,53 +187,91 @@ Correct: [A, B, C, or D]`;
         }
       }
 
-      // Improved question extraction - handle multiple formats
-      // Method 1: Split by "Question" keyword
-      const questionSections = text.split(/(?=Question \d+:)/i).filter(section => 
-        section.trim().match(/Question \d+:/i)
-      );
+      // Ultra-flexible question extraction - handle ANY format
+      // Try multiple methods to find questions
       
-      console.log('Found question sections:', questionSections.length);
+      // Method 1: Look for "Question" followed by number
+      let questionBlocks = text.split(/(?=Question\s*\d+[:\s])/i);
+      if (questionBlocks.length < 2) {
+        // Method 2: Look for numbered questions (1., 2., 3.)
+        questionBlocks = text.split(/(?=\d+\.\s*[A-Z])/i);
+      }
+      if (questionBlocks.length < 2) {
+        // Method 3: Look for lines starting with Q1, Q2, Q3
+        questionBlocks = text.split(/(?=Q\d+[:\s])/i);
+      }
       
-      questions = questionSections.map((section, idx) => {
-        const lines = section.split(/\n/).map(l => l.trim()).filter(l => l && !l.match(/^Time Period:/i));
+      questions = [];
+      
+      // Process each potential question block
+      for (let i = 0; i < questionBlocks.length; i++) {
+        const block = questionBlocks[i];
+        if (!block || block.trim().length < 20) continue; // Skip tiny blocks
         
-        // Find question text - line with "Question X:"
+        const lines = block.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length < 5) continue; // Need at least question + 4 options
+        
         let questionText = '';
-        const questionLineIndex = lines.findIndex(l => l.match(/Question \d+:/i));
-        if (questionLineIndex >= 0) {
-          questionText = lines[questionLineIndex].replace(/Question \d+:\s*/i, '').trim();
-        }
-        
-        // Extract all options (A), B), C), D))
         const options = [];
-        const optionLines = lines.filter(l => l.match(/^[A-D][).]\s/));
-        optionLines.forEach(line => {
-          const match = line.match(/^[A-D][).]\s*(.+)$/i);
-          if (match) {
-            options.push(match[1].trim());
-          }
-        });
-        
-        // Extract correct answer
         let correct = '';
-        const correctLine = lines.find(l => l.match(/Correct:\s*([A-D])/i));
-        if (correctLine) {
-          const match = correctLine.match(/Correct:\s*([A-D])/i);
-          correct = match ? match[1].toUpperCase() : '';
+        
+        // Find question text - could be "Question 1:", "1.", "Q1:", etc.
+        for (const line of lines) {
+          const qMatch = line.match(/(?:Question\s*\d+[:\s]|Q\d+[:\s]|\d+\.\s*)(.+)/i);
+          if (qMatch && !questionText) {
+            questionText = qMatch[1].trim();
+            break;
+          }
         }
         
-        console.log(`Question ${idx + 1}:`, { questionText, optionsCount: options.length, correct });
-        
-        if (questionText && options.length >= 4 && correct) {
-          return { 
-            question: questionText, 
-            options: options.slice(0, 4), // Ensure exactly 4 options
-            correct 
-          };
+        // If no question found with pattern, use first substantial line
+        if (!questionText && lines[0] && lines[0].length > 10 && !lines[0].match(/^[A-D][).]/)) {
+          questionText = lines[0];
         }
-        return null;
-      }).filter(q => q !== null && q.question && q.options.length === 4 && q.correct);
+        
+        // Extract options - look for A), B), C), D) or A., B., C., D.
+        for (const line of lines) {
+          const optMatch = line.match(/^([A-D])[).]\s*(.+)$/i);
+          if (optMatch) {
+            const letter = optMatch[1].toUpperCase();
+            const text = optMatch[2].trim();
+            if (text.length > 0) {
+              options.push(text);
+            }
+          }
+        }
+        
+        // Extract correct answer - look for "Correct: A" or "Answer: B" etc.
+        for (const line of lines) {
+          const correctMatch = line.match(/(?:Correct|Answer)[:\s]+([A-D])/i);
+          if (correctMatch) {
+            correct = correctMatch[1].toUpperCase();
+            break;
+          }
+        }
+        
+        // If we have question and at least 3 options, accept it (we'll pad if needed)
+        if (questionText && options.length >= 3) {
+          // Pad to 4 options if needed
+          while (options.length < 4) {
+            options.push('Option ' + (options.length + 1));
+          }
+          
+          // If no correct answer found, default to A
+          if (!correct) {
+            correct = 'A';
+          }
+          
+          questions.push({
+            question: questionText,
+            options: options.slice(0, 4),
+            correct: correct
+          });
+        }
+      }
+      
+      // Limit to 3 questions max
+      questions = questions.slice(0, 3);
       
       console.log('Final parsed questions:', questions.length, questions);
 
