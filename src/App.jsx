@@ -148,8 +148,10 @@ Correct: [A, B, C, or D]`;
       const text = res?.data?.choices?.[0]?.message?.content?.trim() || '';
       
       // Log full response for debugging
-      console.log('Full API Response:', text);
+      console.log('=== FULL API RESPONSE ===');
+      console.log(text);
       console.log('Response length:', text.length);
+      console.log('=== END API RESPONSE ===');
       
       if (!text) {
         setError('No response received from API. Please try again.');
