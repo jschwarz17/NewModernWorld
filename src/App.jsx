@@ -112,16 +112,44 @@ function App() {
     Include exactly 3 questions. Do not include any text outside of the JSON object.`;
 
     try {
+      console.log('Making API call...');
       const res = await axios.post('https://api.x.ai/v1/chat/completions', {
         model: 'grok-4-1-fast-non-reasoning',
         messages: [{ role: 'user', content: prompt }]
-      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+      }, { 
+        headers: { 
+          'Authorization': `Bearer ${API_KEY}`,
+          'Content-Type': 'application/json'
+        } 
+      });
 
+      console.log('API call successful, status:', res.status);
       let rawText = res?.data?.choices?.[0]?.message?.content?.trim() || '';
+      console.log('Raw API response length:', rawText.length);
+      console.log('Raw API response preview:', rawText.substring(0, 200));
+      
+      if (!rawText) {
+        throw new Error('Empty response from API');
+      }
       
       // Remove potential markdown code blocks if the AI adds them
       const cleanJson = rawText.replace(/```json|```/g, '').trim();
-      const data = JSON.parse(cleanJson);
+      console.log('Cleaned JSON preview:', cleanJson.substring(0, 200));
+      
+      let data;
+      try {
+        data = JSON.parse(cleanJson);
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError);
+        console.error('Failed to parse:', cleanJson);
+        throw new Error(`Failed to parse JSON: ${parseError.message}. Response: ${cleanJson.substring(0, 300)}`);
+      }
+
+      console.log('Parsed data:', { 
+        period: data.period, 
+        paragraphLength: data.paragraph?.length, 
+        questionsCount: data.questions?.length 
+      });
 
       setContent({
         period: data.period || `${year}-${endYear}`,
@@ -131,10 +159,28 @@ function App() {
 
       if (data.questions?.length > 0) {
         setTimerActive(true);
+        console.log('Questions loaded successfully:', data.questions.length);
+      } else {
+        console.warn('No questions in response:', data);
       }
     } catch (e) {
       console.error('API or Parsing Error:', e);
-      setError('Failed to load or parse history data. Please try again.');
+      console.error('Error details:', {
+        message: e.message,
+        response: e.response?.data,
+        status: e.response?.status,
+        statusText: e.response?.statusText
+      });
+      
+      if (e.response?.status === 401) {
+        setError('API key is invalid or expired. Please check your API key.');
+      } else if (e.response?.status === 403) {
+        setError('Access forbidden. This may be a CORS issue. Check browser console for details.');
+      } else if (e.code === 'ERR_NETWORK' || e.message?.includes('CORS')) {
+        setError('Network error or CORS issue. The API request may be blocked. Check browser console.');
+      } else {
+        setError(`Failed to load history: ${e.message || 'Unknown error'}. Check console for details.`);
+      }
     }
     setLoading(false);
   };
