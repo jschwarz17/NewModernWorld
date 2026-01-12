@@ -6,6 +6,11 @@ const GEO_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/
 const API_KEY = import.meta.env.VITE_GROK_PART1 + import.meta.env.VITE_GROK_PART2;
 const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'];
 
+// Helper function to scramble a name
+const scrambleName = (name) => {
+  return name.split('').reverse().join('');
+};
+
 function App() {
   console.log('🚀 App component loaded!');
   const [geoData, setGeoData] = useState(null);
@@ -18,6 +23,23 @@ function App() {
   const [timerActive, setTimerActive] = useState(false);
   const [error, setError] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [userName, setUserName] = useState(() => {
+    const saved = localStorage.getItem('history_userName');
+    return saved || '';
+  });
+  const [scrambledName, setScrambledName] = useState(() => {
+    const saved = localStorage.getItem('history_scrambledName');
+    return saved || '';
+  });
+  const [hasCompletedFirstRound, setHasCompletedFirstRound] = useState(() => {
+    const saved = localStorage.getItem('history_firstRoundComplete');
+    return saved === 'true';
+  });
+  const [continentScores, setContinentScores] = useState(() => {
+    const saved = localStorage.getItem('history_continentScores');
+    return saved ? JSON.parse(saved) : {};
+  });
 
   const [progress, setProgress] = useState(() => {
     const saved = localStorage.getItem('history_progress');
@@ -27,6 +49,26 @@ function App() {
   useEffect(() => {
     localStorage.setItem('history_progress', JSON.stringify(progress));
   }, [progress]);
+
+  useEffect(() => {
+    if (userName) {
+      localStorage.setItem('history_userName', userName);
+    }
+  }, [userName]);
+
+  useEffect(() => {
+    if (scrambledName) {
+      localStorage.setItem('history_scrambledName', scrambledName);
+    }
+  }, [scrambledName]);
+
+  useEffect(() => {
+    localStorage.setItem('history_firstRoundComplete', hasCompletedFirstRound.toString());
+  }, [hasCompletedFirstRound]);
+
+  useEffect(() => {
+    localStorage.setItem('history_continentScores', JSON.stringify(continentScores));
+  }, [continentScores]);
 
   useEffect(() => {
     let timer;
@@ -72,10 +114,29 @@ function App() {
 
   const getPolygonColor = (d) => {
     const continent = d.properties?.CONTINENT || d.properties?.continent || '';
-    if (continent === selectedContinent) return 'rgba(255, 165, 0, 0.9)'; 
+    
+    // Highlight selected continent
+    if (continent === selectedContinent) return 'rgba(255, 165, 0, 0.9)';
+    
+    // Get score for this continent (number of time periods with 2+ correct answers)
+    const scoredPeriods = continentScores[continent] || [];
+    const score = scoredPeriods.length;
+    
+    // Base color based on progress year
     const year = progress[continent] || 1500;
-    const opacity = Math.max(0.1, Math.min(0.7, (year - 1500) / 500));
-    return `rgba(30, 144, 255, ${opacity})`;
+    const baseOpacity = Math.max(0.1, Math.min(0.7, (year - 1500) / 500));
+    
+    // Add color intensity based on score (light green shading that gets darker)
+    // Score 0: no extra color
+    // Score 1+: light green (rgba(46, 204, 113, ...)) that gets darker with more scores
+    if (score > 0) {
+      // Light green shading: start at 0.2 opacity, increase by 0.15 per score level
+      const greenOpacity = Math.min(0.8, 0.2 + (score * 0.15));
+      return `rgba(46, 204, 113, ${greenOpacity})`;
+    }
+    
+    // Default blue color based on progress
+    return `rgba(30, 144, 255, ${baseOpacity})`;
   };
 
   const handleContinentClick = (polygon) => {
@@ -217,6 +278,34 @@ function App() {
     if (Object.keys(newAnswers).length === content.questions.length) {
       setShowMoveAhead(true);
       setTimerActive(false);
+      
+      // Count correct answers
+      const correctCount = Object.values(newAnswers).filter(a => a.isCorrect).length;
+      
+      // If 2+ correct answers, increment score for this continent/time period
+      if (correctCount >= 2 && selectedContinent) {
+        const periodKey = `${selectedContinent}_${content.period}`;
+        setContinentScores(prev => {
+          const newScores = { ...prev };
+          // Track which periods have been scored
+          if (!newScores[selectedContinent]) {
+            newScores[selectedContinent] = [];
+          }
+          // Only increment if we haven't already scored this period
+          if (!newScores[selectedContinent].includes(periodKey)) {
+            newScores[selectedContinent] = [...newScores[selectedContinent], periodKey];
+          }
+          return newScores;
+        });
+      }
+      
+      // Check if this is the first completed round
+      if (!hasCompletedFirstRound && selectedContinent) {
+        setHasCompletedFirstRound(true);
+        if (!userName) {
+          setShowNameInput(true);
+        }
+      }
     }
   };
 
@@ -228,6 +317,20 @@ function App() {
     setTimeLeft(60); 
     setContent({ period: '', paragraph: '', questions: [] });
     fetchHistory(nextYear, selectedContinent);
+  };
+
+  const handleNameSubmit = (e) => {
+    e.preventDefault();
+    const input = e.target.querySelector('input');
+    const name = input.value.trim();
+    if (name) {
+      const scrambled = scrambleName(name);
+      setUserName(name);
+      setScrambledName(scrambled);
+      setShowNameInput(false);
+      // Show a brief message
+      alert(`Ok, we'll call you ${scrambled}.`);
+    }
   };
 
   if (!geoData) return <div style={{background: '#000', color: '#fff', height: '100vh', padding: '20px'}}>Loading Map...</div>;
@@ -255,9 +358,9 @@ function App() {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h1 style={{fontSize: isMobile ? '20px' : '24px', margin: 0}}>History Explorer</h1>
-          {timerActive && (
-            <div style={{ padding: '8px 15px', backgroundColor: timeLeft < 10 ? '#c0392b' : '#333', borderRadius: '20px', fontWeight: 'bold' }}>
-              ⏱ {timeLeft}s
+          {scrambledName && (
+            <div style={{ fontSize: isMobile ? '14px' : '16px', color: '#888' }}>
+              User: {scrambledName}
             </div>
           )}
         </div>
@@ -337,25 +440,119 @@ function App() {
       <div style={{ 
         width: isMobile ? '100vw' : '50vw', 
         height: isMobile ? '50vh' : '100vh',
-        backgroundColor: '#000'
+        backgroundColor: '#000',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
-        {geoData && geoData.features ? (
-          <Globe 
-            width={dimensions.width} 
-            height={dimensions.height} 
-            globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
-            backgroundColor="#000" 
-            polygonsData={geoData.features} 
-            polygonCapColor={getPolygonColor} 
-            onPolygonClick={(polygon) => {
-              console.log('🌐 Globe onPolygonClick triggered!', polygon);
-              handleContinentClick(polygon);
-            }} 
-          />
-        ) : (
-          <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
+        {/* Timer - moved to globe panel */}
+        {timerActive && (
+          <div style={{ 
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            padding: '8px 15px', 
+            backgroundColor: timeLeft < 10 ? '#c0392b' : '#333', 
+            borderRadius: '20px', 
+            fontWeight: 'bold',
+            zIndex: 1000,
+            color: '#fff'
+          }}>
+            ⏱ {timeLeft}s
+          </div>
         )}
+        
+        {/* Instruction text above globe */}
+        <div style={{ 
+          padding: '15px 20px',
+          color: '#888',
+          fontSize: '14px',
+          textAlign: 'center',
+          borderBottom: '1px solid #333'
+        }}>
+          Spin the globe and pick a continent
+        </div>
+        
+        {/* Globe container */}
+        <div style={{ flex: 1, position: 'relative' }}>
+          {geoData && geoData.features ? (
+            <Globe 
+              width={dimensions.width} 
+              height={dimensions.height} 
+              globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
+              backgroundColor="#000" 
+              polygonsData={geoData.features} 
+              polygonCapColor={getPolygonColor} 
+              onPolygonClick={(polygon) => {
+                console.log('🌐 Globe onPolygonClick triggered!', polygon);
+                handleContinentClick(polygon);
+              }} 
+            />
+          ) : (
+            <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
+          )}
+        </div>
       </div>
+      
+      {/* Name Input Modal */}
+      {showNameInput && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            backgroundColor: '#222',
+            padding: '30px',
+            borderRadius: '10px',
+            maxWidth: '400px',
+            width: '90%'
+          }}>
+            <h2 style={{ color: '#fff', marginTop: 0, marginBottom: '20px' }}>What's your name?</h2>
+            <form onSubmit={handleNameSubmit}>
+              <input
+                type="text"
+                placeholder="Enter your name"
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  fontSize: '16px',
+                  borderRadius: '6px',
+                  border: '1px solid #444',
+                  backgroundColor: '#333',
+                  color: '#fff',
+                  marginBottom: '15px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  fontSize: '16px',
+                  backgroundColor: '#0d6efd',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Submit
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
