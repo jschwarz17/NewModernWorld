@@ -344,11 +344,36 @@ function App() {
       backgroundColor: '#000', 
       overflowX: 'hidden' 
     }}>
+      {/* FIXED HEADER */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        backgroundColor: '#111',
+        borderBottom: '2px solid #333',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '0 30px',
+        zIndex: 1000,
+        boxSizing: 'border-box'
+      }}>
+        <h1 style={{fontSize: isMobile ? '20px' : '24px', margin: 0, color: '#fff'}}>History Explorer</h1>
+        {scrambledName && (
+          <div style={{ fontSize: isMobile ? '14px' : '16px', color: '#888' }}>
+            User: <span style={{ fontWeight: 'bold', color: '#fff' }}>{scrambledName}</span>
+          </div>
+        )}
+      </div>
+
       {/* LEFT PANEL: CONTENT */}
       <div style={{ 
         width: isMobile ? '100vw' : '50vw', 
         height: isMobile ? 'auto' : '100vh',
         padding: '30px',
+        paddingTop: '90px', // Account for fixed header
         overflowY: 'auto', 
         backgroundColor: '#111', 
         color: '#fff', 
@@ -356,14 +381,6 @@ function App() {
         borderRight: isMobile ? 'none' : '2px solid #333',
         boxSizing: 'border-box' 
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h1 style={{fontSize: isMobile ? '20px' : '24px', margin: 0}}>History Explorer</h1>
-          {scrambledName && (
-            <div style={{ fontSize: isMobile ? '14px' : '16px', color: '#888' }}>
-              User: {scrambledName}
-            </div>
-          )}
-        </div>
 
         {loading ? (
           <p>Loading Era...</p>
