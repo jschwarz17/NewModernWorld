@@ -449,7 +449,7 @@ function App() {
             )}
           </div>
         ) : (
-          <p style={{ color: '#888' }}>Select a continent on the globe to begin.</p>
+          <p style={{ color: '#888' }}>Spin the globe and pick a continent</p>
         )}
       </div>
 
@@ -458,9 +458,7 @@ function App() {
         width: isMobile ? '100vw' : '50vw', 
         height: isMobile ? '50vh' : '100vh',
         backgroundColor: '#000',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column'
+        position: 'relative'
       }}>
         {/* Timer - moved to globe panel */}
         {timerActive && (
@@ -479,36 +477,23 @@ function App() {
           </div>
         )}
         
-        {/* Instruction text above globe */}
-        <div style={{ 
-          padding: '15px 20px',
-          color: '#888',
-          fontSize: '14px',
-          textAlign: 'center',
-          borderBottom: '1px solid #333'
-        }}>
-          Spin the globe and pick a continent
-        </div>
-        
         {/* Globe container */}
-        <div style={{ flex: 1, position: 'relative' }}>
-          {geoData && geoData.features ? (
-            <Globe 
-              width={dimensions.width} 
-              height={dimensions.height} 
-              globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
-              backgroundColor="#000" 
-              polygonsData={geoData.features} 
-              polygonCapColor={getPolygonColor} 
-              onPolygonClick={(polygon) => {
-                console.log('🌐 Globe onPolygonClick triggered!', polygon);
-                handleContinentClick(polygon);
-              }} 
-            />
-          ) : (
-            <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
-          )}
-        </div>
+        {geoData && geoData.features ? (
+          <Globe 
+            width={dimensions.width} 
+            height={dimensions.height} 
+            globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
+            backgroundColor="#000" 
+            polygonsData={geoData.features} 
+            polygonCapColor={getPolygonColor} 
+            onPolygonClick={(polygon) => {
+              console.log('🌐 Globe onPolygonClick triggered!', polygon);
+              handleContinentClick(polygon);
+            }} 
+          />
+        ) : (
+          <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
+        )}
       </div>
       
       {/* Name Input Modal */}
