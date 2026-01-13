@@ -6,6 +6,28 @@ const GEO_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/
 const API_KEY = import.meta.env.VITE_GROK_PART1 + import.meta.env.VITE_GROK_PART2;
 const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'];
 
+// Levels system (max score with 30% bonus: 1,845 points)
+const LEVELS = [
+  { name: 'Time Tourist (Newbie)', minPoints: 0, maxPoints: 100 },
+  { name: 'History Hiker', minPoints: 101, maxPoints: 300 },
+  { name: 'Past Pathfinder', minPoints: 301, maxPoints: 600 },
+  { name: 'Era Explorer', minPoints: 601, maxPoints: 900 },
+  { name: 'Chronology Connoisseur', minPoints: 901, maxPoints: 1200 },
+  { name: 'Timeline Titan', minPoints: 1201, maxPoints: 1350 },
+  { name: 'History Hero', minPoints: 1351, maxPoints: 1845 }
+];
+
+// Continent diversity bonus tiers (percentage)
+const CONTINENT_BONUS_TIERS = {
+  1: 0,      // 1 continent: 0% bonus
+  2: 5,      // 2 continents: +5% bonus
+  3: 10,     // 3 continents: +10% bonus
+  4: 15,     // 4 continents: +15% bonus
+  5: 20,     // 5 continents: +20% bonus
+  6: 25,     // 6 continents: +25% bonus
+  7: 30      // 7 continents: +30% bonus (all continents)
+};
+
 // Helper function to scramble a name randomly
 const scrambleName = (name) => {
   const chars = name.split('');
@@ -17,8 +39,66 @@ const scrambleName = (name) => {
   return chars.join('');
 };
 
+// Helper function to calculate total score with bonus
+const calculateTotalScore = (continentScores) => {
+  let baseScore = 0;
+  let continentsPlayed = 0;
+  
+  CONTINENTS.forEach(continent => {
+    const periods = continentScores[continent] || [];
+    if (periods.length > 0) {
+      continentsPlayed++;
+      // Sum points from all periods (each period stores its point value)
+      periods.forEach(period => {
+        if (typeof period === 'object' && period.points) {
+          baseScore += period.points;
+        } else if (typeof period === 'number') {
+          baseScore += period; // Backwards compatibility
+        }
+      });
+    }
+  });
+  
+  // Apply continent diversity bonus
+  const bonusPercent = CONTINENT_BONUS_TIERS[continentsPlayed] || 0;
+  const bonusScore = Math.floor(baseScore * (bonusPercent / 100));
+  const totalScore = baseScore + bonusScore;
+  
+  return {
+    baseScore,
+    bonusScore,
+    totalScore,
+    continentsPlayed,
+    bonusPercent
+  };
+};
+
+// Helper function to get level from total score
+const getLevelFromScore = (totalScore) => {
+  for (let i = LEVELS.length - 1; i >= 0; i--) {
+    if (totalScore >= LEVELS[i].minPoints) {
+      return LEVELS[i];
+    }
+  }
+  return LEVELS[0];
+};
+
 // Helper function to get period end year based on start year
-const getPeriodEndYear = (startYear) => {
+const getPeriodEndYear = (startYear, continent = null) => {
+  // Special handling for Antarctica - use much larger time periods
+  if (continent === 'Antarctica') {
+    // Antarctica starts at 1770 (first exploration), use 50-year periods throughout
+    const antarcticaStart = 1770;
+    if (startYear < antarcticaStart) {
+      return antarcticaStart;
+    }
+    // 50-year periods: 1770-1820, 1821-1870, 1871-1920, 1921-1970, 1971-2000
+    const periodStart = Math.floor((startYear - antarcticaStart) / 50) * 50 + antarcticaStart;
+    const endYear = periodStart + 50;
+    return Math.min(endYear, 2000); // Cap at 2000
+  }
+  
+  // Standard periods for other continents
   if (startYear < 1701) {
     // 50-year periods: 1500-1550, 1551-1600, 1601-1650, 1651-1700
     const periodStart = Math.floor((startYear - 1500) / 50) * 50 + 1500;
@@ -42,10 +122,14 @@ const getPeriodEndYear = (startYear) => {
 };
 
 // Helper function to get next period start year
-const getNextPeriodStartYear = (currentYear) => {
-  const endYear = getPeriodEndYear(currentYear);
+const getNextPeriodStartYear = (currentYear, continent = null) => {
+  const endYear = getPeriodEndYear(currentYear, continent);
   if (endYear >= 2000) {
     return 2000; // Don't go beyond 2000
+  }
+  // For Antarctica, use 50-year periods with gaps (endYear + 1)
+  if (continent === 'Antarctica') {
+    return endYear + 1;
   }
   // For 1-year periods (1951+), next period starts at endYear (no gap)
   // For all other periods, next period starts at endYear + 1 (there's a gap)
@@ -68,6 +152,7 @@ function App() {
   const [error, setError] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showNameInput, setShowNameInput] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
   const [userName, setUserName] = useState(() => {
     const saved = localStorage.getItem('history_userName');
     return saved || '';
@@ -87,7 +172,10 @@ function App() {
 
   const [progress, setProgress] = useState(() => {
     const saved = localStorage.getItem('history_progress');
-    return saved ? JSON.parse(saved) : CONTINENTS.reduce((acc, cont) => ({ ...acc, [cont]: 1500 }), {});
+    return saved ? JSON.parse(saved) : CONTINENTS.reduce((acc, cont) => ({ 
+      ...acc, 
+      [cont]: cont === 'Antarctica' ? 1770 : 1500 
+    }), {});
   });
 
   useEffect(() => {
@@ -156,6 +244,10 @@ function App() {
       });
   }, []);
 
+  // Calculate total score and level
+  const scoreData = calculateTotalScore(continentScores);
+  const currentLevel = getLevelFromScore(scoreData.totalScore);
+
   const getPolygonColor = (d) => {
     const continent = d.properties?.CONTINENT || d.properties?.continent || '';
     
@@ -199,7 +291,8 @@ function App() {
       setTimerActive(false);
       setContent({ period: '', paragraph: '', questions: [] });
       setError(null);
-      const year = progress[continent] || 1500;
+      const defaultYear = continent === 'Antarctica' ? 1770 : 1500;
+      const year = progress[continent] || defaultYear;
       console.log('🔵 Calling fetchHistory with:', { year, continent });
       fetchHistory(year, continent);
       if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -212,7 +305,7 @@ function App() {
     console.log('🚀 fetchHistory called with:', { year, continentName });
     setLoading(true);
     setError(null);
-    const endYear = getPeriodEndYear(year);
+    const endYear = getPeriodEndYear(year, continentName);
 
     console.log('🔑 API_KEY check:', API_KEY ? 'Present' : 'Missing', API_KEY?.substring(0, 10) + '...');
     if (!API_KEY || API_KEY.includes('undefined')) {
@@ -326,19 +419,38 @@ function App() {
       // Count correct answers
       const correctCount = Object.values(newAnswers).filter(a => a.isCorrect).length;
       
-      // If 2+ correct answers, increment score for this continent/time period
+      // If 2+ correct answers, add points for this continent/time period
       if (correctCount >= 2 && selectedContinent) {
-        const periodKey = `${selectedContinent}_${content.period}`;
+        const periodKey = content.period;
+        const points = correctCount === 3 ? 3 : 2; // 3 points for all correct, 2 for 2 correct
+        
         setContinentScores(prev => {
           const newScores = { ...prev };
-          // Track which periods have been scored
           if (!newScores[selectedContinent]) {
             newScores[selectedContinent] = [];
           }
-          // Only increment if we haven't already scored this period
-          if (!newScores[selectedContinent].includes(periodKey)) {
-            newScores[selectedContinent] = [...newScores[selectedContinent], periodKey];
+          
+          // Check if this period already exists
+          const periodIndex = newScores[selectedContinent].findIndex(
+            p => (typeof p === 'object' ? p.period : p) === periodKey || (typeof p === 'string' && p === `${selectedContinent}_${periodKey}`)
+          );
+          
+          if (periodIndex === -1) {
+            // Add new period with points
+            newScores[selectedContinent].push({ period: periodKey, points });
+          } else {
+            // Update points if higher (shouldn't happen, but just in case)
+            const existing = newScores[selectedContinent][periodIndex];
+            if (typeof existing === 'object' && existing.period) {
+              if (points > (existing.points || 2)) {
+                newScores[selectedContinent][periodIndex] = { period: periodKey, points };
+              }
+            } else {
+              // Migrate old format to new format
+              newScores[selectedContinent][periodIndex] = { period: periodKey, points };
+            }
           }
+          
           return newScores;
         });
       }
@@ -354,7 +466,7 @@ function App() {
   };
 
   const handleMoveAhead = () => {
-    const nextYear = getNextPeriodStartYear(progress[selectedContinent]);
+    const nextYear = getNextPeriodStartYear(progress[selectedContinent], selectedContinent);
     setProgress(prev => ({ ...prev, [selectedContinent]: nextYear }));
     setAnswers({});
     setShowMoveAhead(false);
@@ -394,7 +506,7 @@ function App() {
         top: 0,
         left: 0,
         right: 0,
-        height: '60px',
+        height: scrambledName ? '80px' : '60px',
         backgroundColor: '#111',
         borderBottom: '2px solid #333',
         display: 'flex',
@@ -405,11 +517,26 @@ function App() {
         boxSizing: 'border-box'
       }}>
         <h1 style={{fontSize: isMobile ? '20px' : '24px', margin: 0, color: '#fff'}}>History Explorer</h1>
-        {scrambledName && (
-          <div style={{ fontSize: isMobile ? '14px' : '16px', color: '#888' }}>
-            User: <span style={{ fontWeight: 'bold', color: '#fff' }}>{scrambledName}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+          <div style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#fff' }}>
+            {scoreData.totalScore} pts
           </div>
-        )}
+          {scrambledName && (
+            <div style={{ fontSize: isMobile ? '12px' : '14px', color: '#888', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <div>
+                User: <span style={{ fontWeight: 'bold', color: '#fff' }}>{scrambledName}</span>
+              </div>
+              <div style={{ fontSize: isMobile ? '11px' : '12px', color: '#3498db', marginTop: '2px' }}>
+                {currentLevel.name}
+              </div>
+            </div>
+          )}
+          {!scrambledName && (
+            <div style={{ fontSize: isMobile ? '11px' : '12px', color: '#3498db' }}>
+              {currentLevel.name}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* LEFT PANEL: CONTENT */}
@@ -417,7 +544,7 @@ function App() {
         width: isMobile ? '100vw' : '50vw', 
         height: isMobile ? 'auto' : '100vh',
         padding: '30px',
-        paddingTop: '90px', // Account for fixed header
+        paddingTop: scrambledName ? '100px' : '80px', // Account for fixed header
         overflowY: 'auto', 
         backgroundColor: '#111', 
         color: '#fff', 
@@ -495,6 +622,33 @@ function App() {
         ) : (
           <p style={{ color: '#888' }}>Spin the globe and pick a continent</p>
         )}
+        
+        {/* Instructions Link */}
+        <div style={{ marginTop: '40px', paddingBottom: '20px', textAlign: 'center' }}>
+          <button
+            onClick={() => setShowInstructions(true)}
+            style={{
+              background: 'transparent',
+              border: '1px solid #444',
+              color: '#888',
+              padding: '10px 20px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.borderColor = '#666';
+              e.target.style.color = '#fff';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.borderColor = '#444';
+              e.target.style.color = '#888';
+            }}
+          >
+            Instructions
+          </button>
+        </div>
       </div>
 
       {/* RIGHT PANEL: GLOBE */}
@@ -540,6 +694,81 @@ function App() {
         )}
       </div>
       
+      {/* Instructions Modal */}
+      {showInstructions && (
+        <div 
+          onClick={() => setShowInstructions(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10000,
+            animation: 'fadeIn 0.3s ease-in'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#222',
+              padding: '40px',
+              borderRadius: '12px',
+              maxWidth: '500px',
+              width: '90%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              border: '1px solid #444',
+              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)',
+              animation: 'slideUp 0.3s ease-out'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+              <h2 style={{ color: '#fff', margin: 0, fontSize: '24px' }}>Instructions</h2>
+              <button
+                onClick={() => setShowInstructions(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#888',
+                  fontSize: '28px',
+                  cursor: 'pointer',
+                  padding: '0',
+                  width: '30px',
+                  height: '30px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => e.target.style.color = '#fff'}
+                onMouseLeave={(e) => e.target.style.color = '#888'}
+              >
+                ×
+              </button>
+            </div>
+            <ol style={{ 
+              color: '#fff', 
+              lineHeight: '1.8', 
+              fontSize: '16px',
+              paddingLeft: '20px',
+              margin: 0
+            }}>
+              <li style={{ marginBottom: '12px' }}>Click on any continent on the globe to explore its history</li>
+              <li style={{ marginBottom: '12px' }}>Read the historical paragraph about that time period</li>
+              <li style={{ marginBottom: '12px' }}>Answer 3 multiple-choice questions (you have 60 seconds)</li>
+              <li style={{ marginBottom: '12px' }}>Get 2 points for 2 correct answers, or 3 points for all 3 correct</li>
+              <li style={{ marginBottom: '12px' }}>Explore different continents to earn bonus points</li>
+              <li style={{ marginBottom: '12px' }}>Progress through time periods by clicking "Next Era"</li>
+              <li style={{ marginBottom: '0' }}>Level up by earning more points across different continents</li>
+            </ol>
+          </div>
+        </div>
+      )}
+
       {/* Name Input Modal */}
       {showNameInput && (
         <div style={{
