@@ -787,13 +787,12 @@ function App() {
         )}
       </div>
         
-      {/* Instructions Button - Fixed at bottom */}
+      {/* Instructions Button - Fixed at bottom left */}
       {hasCompletedFirstRound && (
         <div style={{
           position: 'fixed',
-          bottom: '20px',
-          left: isMobile ? '50%' : '25vw',
-          transform: isMobile ? 'translateX(-50%)' : 'none',
+          bottom: isMobile ? '170px' : '20px',
+          left: isMobile ? '20px' : '25vw',
           zIndex: 999
         }}>
           <button
@@ -866,8 +865,8 @@ function App() {
           )}
         </div>
 
-        {/* 3D Time Scroll Device */}
-        {selectedContinent && (
+        {/* 3D Time Scroll Device - Desktop: inside globe panel */}
+        {!isMobile && selectedContinent && (
           <TimeScrollDevice 
             continent={selectedContinent}
             currentYear={progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500)}
@@ -883,6 +882,33 @@ function App() {
           />
         )}
       </div>
+
+      {/* 3D Time Scroll Device - Mobile: Fixed at bottom, visible over globe */}
+      {isMobile && selectedContinent && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 998,
+          backgroundColor: '#111',
+          borderTop: '2px solid #333'
+        }}>
+          <TimeScrollDevice 
+            continent={selectedContinent}
+            currentYear={progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500)}
+            onPeriodSelect={(startYear) => {
+              setProgress(prev => ({ ...prev, [selectedContinent]: startYear }));
+              setAnswers({});
+              setShowMoveAhead(false);
+              setTimeLeft(60);
+              setContent({ period: '', paragraph: '', questions: [] });
+              fetchHistory(startYear, selectedContinent);
+            }}
+            isMobile={isMobile}
+          />
+        </div>
+      )}
       
       {/* Instructions Modal */}
       {showInstructions && (
