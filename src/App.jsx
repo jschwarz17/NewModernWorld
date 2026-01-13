@@ -17,16 +17,8 @@ const CONTINENT_COORDINATES = {
   'South America': { lat: -8.7832, lng: -55.4915 }
 };
 
-// Unique base colors for each continent (RGB values)
-const CONTINENT_COLORS = {
-  'Africa': { r: 46, g: 204, b: 113 },      // Green
-  'Antarctica': { r: 149, g: 165, b: 166 }, // Gray
-  'Asia': { r: 231, g: 76, b: 60 },         // Red
-  'Europe': { r: 52, g: 152, b: 219 },      // Blue
-  'North America': { r: 155, g: 89, b: 182 }, // Purple
-  'Australia': { r: 241, g: 196, b: 15 },   // Yellow
-  'South America': { r: 230, g: 126, b: 34 } // Orange
-};
+// Green color for all continents (RGB values)
+const GREEN_COLOR = { r: 46, g: 204, b: 113 };
 
 // Levels system (max score with 30% bonus: 1,845 points)
 const LEVELS = [
@@ -238,6 +230,12 @@ function App() {
     }), {});
   });
 
+  // Cache for prefetched data
+  const [prefetchCache, setPrefetchCache] = useState({
+    nextPeriod: null,      // { continent, year, data }
+    adventure: null        // { continent, year, data }
+  });
+
   useEffect(() => {
     localStorage.setItem('history_progress', JSON.stringify(progress));
   }, [progress]);
@@ -273,6 +271,74 @@ function App() {
   useEffect(() => {
     localStorage.setItem('history_adventureUnlocked', adventureUnlocked.toString());
   }, [adventureUnlocked]);
+
+  // Prefetch next period and adventure data when user has 2+ successful rounds and showMoveAhead is true
+  useEffect(() => {
+    if (!showMoveAhead || !selectedContinent) return;
+    
+    const successfulRoundsCount = completedRounds.filter(r => r.correctCount >= 2).length;
+    if (successfulRoundsCount >= 2) {
+      // Prefetch next time period
+      const currentYear = progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500);
+      const nextYear = getNextPeriodStartYear(currentYear, selectedContinent);
+      if (nextYear < 2000) {
+        // Check cache using functional update pattern (read current value)
+        setPrefetchCache(currentCache => {
+          // Only prefetch if cache doesn't already have the correct data
+          if (!currentCache.nextPeriod || 
+              currentCache.nextPeriod.continent !== selectedContinent || 
+              currentCache.nextPeriod.year !== nextYear) {
+            // Prefetch in background
+            fetchHistory(nextYear, selectedContinent, true).then(prefetchedData => {
+              if (prefetchedData) {
+                setPrefetchCache(prevCache => ({
+                  ...prevCache,
+                  nextPeriod: { continent: selectedContinent, year: nextYear, data: prefetchedData }
+                }));
+              }
+            });
+          }
+          return currentCache; // Return unchanged (update happens in async callback)
+        });
+      }
+      
+      // Prefetch adventure data (random combo, but don't spin globe)
+      setPrefetchCache(currentCache => {
+        if (!currentCache.adventure) {
+          const allCombos = [];
+          CONTINENTS.forEach(cont => {
+            const periods = getAllTimePeriods(cont);
+            periods.forEach(period => {
+              const comboKey = `${cont}_${period.start}-${period.end}`;
+              if (!completedCombos.includes(comboKey)) {
+                allCombos.push({ continent: cont, startYear: period.start, endYear: period.end });
+              }
+            });
+          });
+          if (allCombos.length === 0) {
+            CONTINENTS.forEach(cont => {
+              const periods = getAllTimePeriods(cont);
+              periods.forEach(period => {
+                allCombos.push({ continent: cont, startYear: period.start, endYear: period.end });
+              });
+            });
+          }
+          if (allCombos.length > 0) {
+            const randomCombo = allCombos[Math.floor(Math.random() * allCombos.length)];
+            fetchHistory(randomCombo.startYear, randomCombo.continent, true).then(prefetchedData => {
+              if (prefetchedData) {
+                setPrefetchCache(prevCache => ({
+                  ...prevCache,
+                  adventure: { continent: randomCombo.continent, year: randomCombo.startYear, data: prefetchedData }
+                }));
+              }
+            });
+          }
+        }
+        return currentCache; // Return unchanged (update happens in async callback)
+      });
+    }
+  }, [showMoveAhead, selectedContinent, completedRounds, progress, completedCombos]);
 
   useEffect(() => {
     let timer;
@@ -328,22 +394,22 @@ function App() {
     
     // Get score for this continent (number of time periods with 2+ correct answers)
     const scoredPeriods = continentScores[continent] || [];
-    const score = scoredPeriods.length;
+    const completedCount = scoredPeriods.length;
     
-    // Get the base color for this continent
-    const baseColor = CONTINENT_COLORS[continent] || { r: 30, g: 144, b: 255 };
+    // Get total number of time periods for this continent
+    const allPeriods = getAllTimePeriods(continent);
+    const totalPeriods = allPeriods.length;
     
-    // Start with very light color (low opacity) and get darker with each successful round
-    // Score 0: very light (opacity 0.15)
-    // Score 1+: start at 0.25 and increase by 0.12 per score, max at 0.85
-    const opacity = score === 0 
-      ? 0.15 
-      : Math.min(0.85, 0.25 + (score * 0.12));
+    // Calculate opacity: start very light (0.1), get darker with progress, darkest (0.9) when all rounds completed
+    // Use a ratio of completed/total to determine opacity
+    const opacity = totalPeriods > 0 
+      ? 0.1 + (completedCount / totalPeriods) * 0.8  // Range: 0.1 to 0.9
+      : 0.1;  // Default to very light if no periods
     
-    return `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${opacity})`;
+    return `rgba(${GREEN_COLOR.r}, ${GREEN_COLOR.g}, ${GREEN_COLOR.b}, ${opacity})`;
   };
 
-  const handleContinentClick = (polygon) => {
+  const handleContinentClick = async (polygon) => {
     console.log('🔵 Continent clicked!', polygon);
     const continent = polygon.properties?.CONTINENT || polygon.properties?.continent || polygon.properties?.REGION_UN;
     console.log('🔵 Extracted continent:', continent);
@@ -370,24 +436,41 @@ function App() {
       const year = progress[continent] || defaultYear;
       console.log('🔵 Calling fetchHistory with:', { year, continent });
       fetchHistory(year, continent);
+      
+      // Prefetch next time period for this continent in the background
+      const nextYear = getNextPeriodStartYear(year, continent);
+      if (nextYear < 2000) {
+        const prefetchedData = await fetchHistory(nextYear, continent, true);
+        if (prefetchedData) {
+          setPrefetchCache(prev => ({
+            ...prev,
+            nextPeriod: { continent, year: nextYear, data: prefetchedData }
+          }));
+        }
+      }
+      
       if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       console.warn('❌ Invalid continent or not in list:', continent);
     }
   };
 
-  const fetchHistory = async (year, continentName) => {
-    console.log('🚀 fetchHistory called with:', { year, continentName });
-    setLoading(true);
-    setError(null);
+  const fetchHistory = async (year, continentName, prefetch = false) => {
+    console.log('🚀 fetchHistory called with:', { year, continentName, prefetch });
+    if (!prefetch) {
+      setLoading(true);
+      setError(null);
+    }
     const endYear = getPeriodEndYear(year, continentName);
 
     console.log('🔑 API_KEY check:', API_KEY ? 'Present' : 'Missing', API_KEY?.substring(0, 10) + '...');
     if (!API_KEY || API_KEY.includes('undefined')) {
       console.error('❌ API key not configured!');
-      setError('API key not configured properly.');
-      setLoading(false);
-      return;
+      if (!prefetch) {
+        setError('API key not configured properly.');
+        setLoading(false);
+      }
+      return null;
     }
     console.log('✅ API key is present, proceeding with API call...');
 
@@ -409,7 +492,7 @@ function App() {
     Include exactly 3 questions. Do not include any text outside of the JSON object.`;
 
     try {
-      console.log('Making API call...');
+      console.log('Making API call...', prefetch ? '(prefetch)' : '');
       const res = await axios.post('https://api.x.ai/v1/chat/completions', {
         model: 'grok-4-1-fast-non-reasoning',
         messages: [{ role: 'user', content: prompt }]
@@ -448,17 +531,26 @@ function App() {
         questionsCount: data.questions?.length 
       });
 
-      setContent({
+      const contentData = {
         period: data.period || `${year}-${endYear}`,
         paragraph: data.paragraph || '',
         questions: data.questions || []
-      });
+      };
 
-      if (data.questions?.length > 0) {
-        setTimerActive(true);
-        console.log('Questions loaded successfully:', data.questions.length);
+      if (prefetch) {
+        // Return data for caching, don't set state
+        return contentData;
       } else {
-        console.warn('No questions in response:', data);
+        // Normal flow: set state
+        setContent(contentData);
+
+        if (data.questions?.length > 0) {
+          setTimerActive(true);
+          console.log('Questions loaded successfully:', data.questions.length);
+        } else {
+          console.warn('No questions in response:', data);
+        }
+        setLoading(false);
       }
     } catch (e) {
       console.error('API or Parsing Error:', e);
@@ -469,17 +561,20 @@ function App() {
         statusText: e.response?.statusText
       });
       
-      if (e.response?.status === 401) {
-        setError('API key is invalid or expired. Please check your API key.');
-      } else if (e.response?.status === 403) {
-        setError('Access forbidden. This may be a CORS issue. Check browser console for details.');
-      } else if (e.code === 'ERR_NETWORK' || e.message?.includes('CORS')) {
-        setError('Network error or CORS issue. The API request may be blocked. Check browser console.');
-      } else {
-        setError(`Failed to load history: ${e.message || 'Unknown error'}. Check console for details.`);
+      if (!prefetch) {
+        if (e.response?.status === 401) {
+          setError('API key is invalid or expired. Please check your API key.');
+        } else if (e.response?.status === 403) {
+          setError('Access forbidden. This may be a CORS issue. Check browser console for details.');
+        } else if (e.code === 'ERR_NETWORK' || e.message?.includes('CORS')) {
+          setError('Network error or CORS issue. The API request may be blocked. Check browser console.');
+        } else {
+          setError(`Failed to load history: ${e.message || 'Unknown error'}. Check console for details.`);
+        }
+        setLoading(false);
       }
+      return null;
     }
-    setLoading(false);
   };
 
   const handleAnswer = (i, letter) => {
@@ -567,54 +662,93 @@ function App() {
 
   const handleMoveAhead = () => {
     const nextYear = getNextPeriodStartYear(progress[selectedContinent], selectedContinent);
-    setProgress(prev => ({ ...prev, [selectedContinent]: nextYear }));
-    setAnswers({});
-    setShowMoveAhead(false);
-    setTimeLeft(60); 
-    setContent({ period: '', paragraph: '', questions: [] });
-    fetchHistory(nextYear, selectedContinent);
-  };
-
-  const handleAdventure = () => {
-    // Get all possible continent-time period combos
-    const allCombos = [];
-    CONTINENTS.forEach(continent => {
-      const periods = getAllTimePeriods(continent);
-      periods.forEach(period => {
-        const comboKey = `${continent}_${period.start}-${period.end}`;
-        if (!completedCombos.includes(comboKey)) {
-          allCombos.push({ continent, startYear: period.start, endYear: period.end });
-        }
-      });
-    });
-
-    if (allCombos.length === 0) {
-      // All combos completed, just pick any random one
-      CONTINENTS.forEach(continent => {
-        const periods = getAllTimePeriods(continent);
-        periods.forEach(period => {
-          allCombos.push({ continent, startYear: period.start, endYear: period.end });
-        });
-      });
-    }
-
-    if (allCombos.length > 0) {
-      const randomCombo = allCombos[Math.floor(Math.random() * allCombos.length)];
-      setSelectedContinent(randomCombo.continent);
-      
-      // Auto-spin globe to selected continent
-      if (globeRef.current && CONTINENT_COORDINATES[randomCombo.continent]) {
-        const coords = CONTINENT_COORDINATES[randomCombo.continent];
-        globeRef.current.pointOfView({ lat: coords.lat, lng: coords.lng }, 1000);
-      }
-      
-      setProgress(prev => ({ ...prev, [randomCombo.continent]: randomCombo.startYear }));
+    
+    // Check if we have prefetched data
+    if (prefetchCache.nextPeriod && 
+        prefetchCache.nextPeriod.continent === selectedContinent && 
+        prefetchCache.nextPeriod.year === nextYear) {
+      // Use prefetched data
+      setContent(prefetchCache.nextPeriod.data);
+      setProgress(prev => ({ ...prev, [selectedContinent]: nextYear }));
       setAnswers({});
       setShowMoveAhead(false);
       setTimeLeft(60);
+      setTimerActive(true);
+      // Clear the cache
+      setPrefetchCache(prev => ({ ...prev, nextPeriod: null }));
+    } else {
+      // Fetch normally
+      setProgress(prev => ({ ...prev, [selectedContinent]: nextYear }));
+      setAnswers({});
+      setShowMoveAhead(false);
+      setTimeLeft(60); 
       setContent({ period: '', paragraph: '', questions: [] });
-      fetchHistory(randomCombo.startYear, randomCombo.continent);
+      fetchHistory(nextYear, selectedContinent);
+    }
+  };
+
+  const handleAdventure = () => {
+    // Check if we have prefetched adventure data
+    if (prefetchCache.adventure) {
+      const cached = prefetchCache.adventure;
+      setSelectedContinent(cached.continent);
+      
+      // Auto-spin globe to selected continent (only now, when user selects adventure)
+      if (globeRef.current && CONTINENT_COORDINATES[cached.continent]) {
+        const coords = CONTINENT_COORDINATES[cached.continent];
+        globeRef.current.pointOfView({ lat: coords.lat, lng: coords.lng }, 1000);
+      }
+      
+      setProgress(prev => ({ ...prev, [cached.continent]: cached.year }));
+      setContent(cached.data);
+      setAnswers({});
+      setShowMoveAhead(false);
+      setTimeLeft(60);
+      setTimerActive(true);
+      // Clear the cache
+      setPrefetchCache(prev => ({ ...prev, adventure: null }));
       if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // Fallback: Get all possible continent-time period combos
+      const allCombos = [];
+      CONTINENTS.forEach(continent => {
+        const periods = getAllTimePeriods(continent);
+        periods.forEach(period => {
+          const comboKey = `${continent}_${period.start}-${period.end}`;
+          if (!completedCombos.includes(comboKey)) {
+            allCombos.push({ continent, startYear: period.start, endYear: period.end });
+          }
+        });
+      });
+
+      if (allCombos.length === 0) {
+        // All combos completed, just pick any random one
+        CONTINENTS.forEach(continent => {
+          const periods = getAllTimePeriods(continent);
+          periods.forEach(period => {
+            allCombos.push({ continent, startYear: period.start, endYear: period.end });
+          });
+        });
+      }
+
+      if (allCombos.length > 0) {
+        const randomCombo = allCombos[Math.floor(Math.random() * allCombos.length)];
+        setSelectedContinent(randomCombo.continent);
+        
+        // Auto-spin globe to selected continent
+        if (globeRef.current && CONTINENT_COORDINATES[randomCombo.continent]) {
+          const coords = CONTINENT_COORDINATES[randomCombo.continent];
+          globeRef.current.pointOfView({ lat: coords.lat, lng: coords.lng }, 1000);
+        }
+        
+        setProgress(prev => ({ ...prev, [randomCombo.continent]: randomCombo.startYear }));
+        setAnswers({});
+        setShowMoveAhead(false);
+        setTimeLeft(60);
+        setContent({ period: '', paragraph: '', questions: [] });
+        fetchHistory(randomCombo.startYear, randomCombo.continent);
+        if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
   };
 
