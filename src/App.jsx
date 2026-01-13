@@ -58,7 +58,9 @@ const scrambleName = (name) => {
     const j = Math.floor(Math.random() * (i + 1));
     [chars[i], chars[j]] = [chars[j], chars[i]];
   }
-  return chars.join('');
+  const scrambled = chars.join('');
+  // Always capitalize the first letter after scrambling
+  return scrambled.charAt(0).toUpperCase() + scrambled.slice(1).toLowerCase();
 };
 
 // Helper function to calculate total score with bonus
