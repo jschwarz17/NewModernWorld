@@ -155,124 +155,153 @@ const getAllTimePeriods = (continent) => {
   return periods;
 };
 
-// 3D Time Scroll Device Component
-const TimeScrollDevice = ({ continent, currentYear, onPeriodSelect, isMobile }) => {
+// 3D Time Cylinder Component
+const TimeCylinder = ({ continent, currentYear, onPeriodSelect, isMobile }) => {
   const periods = getAllTimePeriods(continent);
-  const containerRef = useRef(null);
+  const [rotation, setRotation] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [startRotation, setStartRotation] = useState(0);
+  const cylinderRef = useRef(null);
   
-  // Find current period index and scroll to it
+  // Calculate rotation to show current period
   useEffect(() => {
     const currentIndex = periods.findIndex(p => p.start === currentYear);
-    if (currentIndex !== -1 && containerRef.current) {
-      const itemWidth = isMobile ? 100 : 120;
-      const containerWidth = containerRef.current.offsetWidth;
-      const targetScroll = (currentIndex * itemWidth) - (containerWidth / 2) + (itemWidth / 2);
-      containerRef.current.scrollLeft = targetScroll;
+    if (currentIndex !== -1 && periods.length > 0) {
+      const anglePerPeriod = 360 / periods.length;
+      const targetRotation = -currentIndex * anglePerPeriod;
+      setRotation(targetRotation);
     }
-  }, [currentYear, continent, isMobile, periods]);
+  }, [currentYear, continent, periods]);
 
-  const handlePeriodClick = (startYear) => {
-    onPeriodSelect(startYear);
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setStartX(e.clientX || e.touches?.[0]?.clientX);
+    setStartRotation(rotation);
+    e.preventDefault();
   };
 
+  useEffect(() => {
+    const handleMouseMoveGlobal = (e) => {
+      if (!isDragging) return;
+      const currentX = e.clientX || e.touches?.[0]?.clientX;
+      const deltaX = currentX - startX;
+      const sensitivity = 0.5;
+      const newRotation = startRotation + deltaX * sensitivity;
+      setRotation(newRotation);
+    };
+
+    const handleMouseUpGlobal = () => {
+      if (!isDragging) return;
+      setIsDragging(false);
+      
+      // Snap to nearest period
+      const anglePerPeriod = 360 / periods.length;
+      const normalizedRotation = ((rotation % 360) + 360) % 360;
+      const nearestIndex = Math.round(Math.abs(normalizedRotation) / anglePerPeriod) % periods.length;
+      const actualIndex = normalizedRotation < 0 
+        ? (periods.length - nearestIndex) % periods.length 
+        : nearestIndex;
+      const targetRotation = -actualIndex * anglePerPeriod;
+      setRotation(targetRotation);
+      
+      // Select the period
+      if (periods[actualIndex]) {
+        onPeriodSelect(periods[actualIndex].start);
+      }
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMoveGlobal);
+      document.addEventListener('mouseup', handleMouseUpGlobal);
+      document.addEventListener('touchmove', handleMouseMoveGlobal, { passive: false });
+      document.addEventListener('touchend', handleMouseUpGlobal);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMoveGlobal);
+        document.removeEventListener('mouseup', handleMouseUpGlobal);
+        document.removeEventListener('touchmove', handleMouseMoveGlobal);
+        document.removeEventListener('touchend', handleMouseUpGlobal);
+      };
+    }
+  }, [isDragging, startX, startRotation, rotation, periods, onPeriodSelect]);
+
+  const cylinderSize = isMobile ? 80 : 100;
+  const radius = cylinderSize * 0.8;
+  const anglePerPeriod = periods.length > 0 ? 360 / periods.length : 0;
+
   return (
-    <div style={{
-      height: isMobile ? '150px' : '200px',
-      backgroundColor: '#111',
-      borderTop: '2px solid #333',
-      overflow: 'hidden',
-      position: 'relative',
-      perspective: '1000px'
-    }}>
-      <div style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
-        background: 'linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 10%, transparent 90%, rgba(0,0,0,0.8) 100%)',
-        pointerEvents: 'none',
-        zIndex: 2
-      }} />
+    <div
+      ref={cylinderRef}
+      onMouseDown={handleMouseDown}
+      onTouchStart={handleMouseDown}
+      style={{
+        width: `${cylinderSize}px`,
+        height: `${cylinderSize * 1.5}px`,
+        position: 'relative',
+        perspective: '1000px',
+        cursor: isDragging ? 'grabbing' : 'grab',
+        userSelect: 'none'
+      }}
+    >
       <div
-        ref={containerRef}
         style={{
-          display: 'flex',
-          alignItems: 'center',
+          width: '100%',
           height: '100%',
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          scrollBehavior: 'smooth',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          padding: '0 50%',
-          cursor: 'grab'
-        }}
-        onMouseDown={(e) => {
-          e.currentTarget.style.cursor = 'grabbing';
-        }}
-        onMouseUp={(e) => {
-          e.currentTarget.style.cursor = 'grab';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.cursor = 'grab';
+          position: 'relative',
+          transformStyle: 'preserve-3d',
+          transform: `rotateY(${rotation}deg)`,
+          transition: isDragging ? 'none' : 'transform 0.3s ease-out'
         }}
       >
-        {periods.map((period) => {
+        {periods.map((period, index) => {
           const isCurrent = period.start === currentYear;
-          const distance = Math.abs(period.start - currentYear);
-          const scale = isCurrent ? 1.2 : Math.max(0.7, 1 - (distance / 1000) * 0.3);
-          const opacity = isCurrent ? 1 : Math.max(0.4, 1 - (distance / 1000) * 0.6);
-          const rotateY = (period.start - currentYear) * 0.1;
+          const angle = index * anglePerPeriod;
+          const x = Math.sin((angle * Math.PI) / 180) * radius;
+          const z = Math.cos((angle * Math.PI) / 180) * radius;
+          const opacity = Math.abs(angle % 360) < 45 || Math.abs(angle % 360) > 315 ? 1 : 0.3;
           
           return (
             <div
               key={`${period.start}-${period.end}`}
-              onClick={() => handlePeriodClick(period.start)}
+              onClick={() => onPeriodSelect(period.start)}
               style={{
-                minWidth: isMobile ? '100px' : '120px',
-                height: isMobile ? '100px' : '140px',
-                margin: '0 8px',
+                position: 'absolute',
+                width: `${cylinderSize * 0.6}px`,
+                height: `${cylinderSize * 0.8}px`,
+                left: '50%',
+                top: '50%',
+                marginLeft: `-${cylinderSize * 0.3}px`,
+                marginTop: `-${cylinderSize * 0.4}px`,
                 backgroundColor: isCurrent ? '#3498db' : '#222',
-                border: isCurrent ? '3px solid #fff' : '2px solid #444',
-                borderRadius: '12px',
+                border: isCurrent ? '2px solid #fff' : '1px solid #444',
+                borderRadius: '8px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
                 alignItems: 'center',
                 cursor: 'pointer',
-                transform: `scale(${scale}) perspective(1000px) rotateY(${rotateY}deg)`,
+                transform: `translate3d(${x}px, 0, ${z}px) rotateY(${angle}deg)`,
+                transformStyle: 'preserve-3d',
                 opacity: opacity,
-                transition: 'all 0.3s ease',
+                transition: isDragging ? 'none' : 'opacity 0.3s ease',
                 boxShadow: isCurrent 
-                  ? '0 8px 16px rgba(52, 152, 219, 0.5), 0 0 20px rgba(52, 152, 219, 0.3)'
-                  : '0 4px 8px rgba(0, 0, 0, 0.3)',
-                transformStyle: 'preserve-3d'
-              }}
-              onMouseEnter={(e) => {
-                if (!isCurrent) {
-                  e.currentTarget.style.transform = `scale(${scale * 1.1}) perspective(1000px) rotateY(${rotateY}deg)`;
-                  e.currentTarget.style.backgroundColor = '#2c3e50';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isCurrent) {
-                  e.currentTarget.style.transform = `scale(${scale}) perspective(1000px) rotateY(${rotateY}deg)`;
-                  e.currentTarget.style.backgroundColor = '#222';
-                }
+                  ? '0 4px 8px rgba(52, 152, 219, 0.5)'
+                  : '0 2px 4px rgba(0, 0, 0, 0.3)',
+                pointerEvents: opacity > 0.5 ? 'auto' : 'none'
               }}
             >
               <div style={{
-                fontSize: isMobile ? '12px' : '14px',
+                fontSize: isMobile ? '9px' : '11px',
                 fontWeight: 'bold',
                 color: '#fff',
                 textAlign: 'center',
-                marginBottom: '4px'
+                marginBottom: '2px'
               }}>
                 {period.start}
               </div>
               <div style={{
-                fontSize: isMobile ? '10px' : '11px',
+                fontSize: isMobile ? '7px' : '9px',
                 color: '#bbb',
                 textAlign: 'center'
               }}>
@@ -282,11 +311,6 @@ const TimeScrollDevice = ({ continent, currentYear, onPeriodSelect, isMobile }) 
           );
         })}
       </div>
-      <style>{`
-        div::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
     </div>
   );
 };
@@ -846,7 +870,7 @@ function App() {
         )}
         
         {/* Globe container */}
-        <div style={{ flex: '1', position: 'relative' }}>
+        <div style={{ flex: '1', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {geoData && geoData.features ? (
             <Globe 
               width={dimensions.width} 
@@ -863,38 +887,43 @@ function App() {
           ) : (
             <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
           )}
+          
+          {/* 3D Time Cylinder - Desktop: next to globe */}
+          {!isMobile && selectedContinent && (
+            <div style={{
+              position: 'absolute',
+              right: '20px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              zIndex: 100
+            }}>
+              <TimeCylinder 
+                continent={selectedContinent}
+                currentYear={progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500)}
+                onPeriodSelect={(startYear) => {
+                  setProgress(prev => ({ ...prev, [selectedContinent]: startYear }));
+                  setAnswers({});
+                  setShowMoveAhead(false);
+                  setTimeLeft(60);
+                  setContent({ period: '', paragraph: '', questions: [] });
+                  fetchHistory(startYear, selectedContinent);
+                }}
+                isMobile={isMobile}
+              />
+            </div>
+          )}
         </div>
-
-        {/* 3D Time Scroll Device - Desktop: inside globe panel */}
-        {!isMobile && selectedContinent && (
-          <TimeScrollDevice 
-            continent={selectedContinent}
-            currentYear={progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500)}
-            onPeriodSelect={(startYear) => {
-              setProgress(prev => ({ ...prev, [selectedContinent]: startYear }));
-              setAnswers({});
-              setShowMoveAhead(false);
-              setTimeLeft(60);
-              setContent({ period: '', paragraph: '', questions: [] });
-              fetchHistory(startYear, selectedContinent);
-            }}
-            isMobile={isMobile}
-          />
-        )}
       </div>
 
-      {/* 3D Time Scroll Device - Mobile: Fixed at bottom, visible over globe */}
+      {/* 3D Time Cylinder - Mobile: Fixed at bottom right, visible over globe */}
       {isMobile && selectedContinent && (
         <div style={{
           position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 998,
-          backgroundColor: '#111',
-          borderTop: '2px solid #333'
+          bottom: '20px',
+          right: '20px',
+          zIndex: 998
         }}>
-          <TimeScrollDevice 
+          <TimeCylinder 
             continent={selectedContinent}
             currentYear={progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500)}
             onPeriodSelect={(startYear) => {
