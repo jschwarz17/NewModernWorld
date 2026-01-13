@@ -6,6 +6,17 @@ const GEO_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/
 const API_KEY = import.meta.env.VITE_GROK_PART1 + import.meta.env.VITE_GROK_PART2;
 const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Australia', 'South America'];
 
+// Continent coordinates for auto-spin feature (approximate center of each continent)
+const CONTINENT_COORDINATES = {
+  'Africa': { lat: 1.5, lng: 17.5 },
+  'Antarctica': { lat: -82.8628, lng: 135.0000 },
+  'Asia': { lat: 34.0479, lng: 100.6197 },
+  'Europe': { lat: 54.5260, lng: 15.2551 },
+  'North America': { lat: 54.5260, lng: -105.2551 },
+  'Australia': { lat: -25.2744, lng: 133.7751 },
+  'South America': { lat: -8.7832, lng: -55.4915 }
+};
+
 // Levels system (max score with 30% bonus: 1,845 points)
 const LEVELS = [
   { name: 'time tourist (newbie)', minPoints: 0, maxPoints: 100 },
@@ -555,6 +566,13 @@ function App() {
     if (allCombos.length > 0) {
       const randomCombo = allCombos[Math.floor(Math.random() * allCombos.length)];
       setSelectedContinent(randomCombo.continent);
+      
+      // Auto-spin globe to selected continent
+      if (globeRef.current && CONTINENT_COORDINATES[randomCombo.continent]) {
+        const coords = CONTINENT_COORDINATES[randomCombo.continent];
+        globeRef.current.pointOfView({ lat: coords.lat, lng: coords.lng }, 1000);
+      }
+      
       setProgress(prev => ({ ...prev, [randomCombo.continent]: randomCombo.startYear }));
       setAnswers({});
       setShowMoveAhead(false);
@@ -622,8 +640,8 @@ function App() {
               {scoreData.totalScore} pts
             </div>
             <div style={{ fontSize: isMobile ? '12px' : '14px', color: '#888', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              <div>
-                User: <span style={{ fontWeight: 'bold', color: '#fff' }}>{scrambledName}</span>
+              <div style={{ fontWeight: 'bold', color: '#fff' }}>
+                {scrambledName}
               </div>
               <div style={{ fontSize: isMobile ? '11px' : '12px', color: '#3498db', marginTop: '2px' }}>
                 {currentLevel.name}
