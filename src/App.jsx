@@ -211,6 +211,12 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Track if Adventure feature has been unlocked (once they get 3 rounds with 2+ correct)
+  const [adventureUnlocked, setAdventureUnlocked] = useState(() => {
+    const saved = localStorage.getItem('history_adventureUnlocked');
+    return saved === 'true';
+  });
+
   const [progress, setProgress] = useState(() => {
     const saved = localStorage.getItem('history_progress');
     return saved ? JSON.parse(saved) : CONTINENTS.reduce((acc, cont) => ({ 
