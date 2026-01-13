@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Globe from 'react-globe.gl';
 import axios from 'axios';
 
 const GEO_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson';
 const API_KEY = import.meta.env.VITE_GROK_PART1 + import.meta.env.VITE_GROK_PART2;
-const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'];
+const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Australia', 'South America'];
 
 // Levels system (max score with 30% bonus: 1,845 points)
 const LEVELS = [
-  { name: 'Time Tourist (Newbie)', minPoints: 0, maxPoints: 100 },
-  { name: 'History Hiker', minPoints: 101, maxPoints: 300 },
-  { name: 'Past Pathfinder', minPoints: 301, maxPoints: 600 },
-  { name: 'Era Explorer', minPoints: 601, maxPoints: 900 },
-  { name: 'Chronology Connoisseur', minPoints: 901, maxPoints: 1200 },
-  { name: 'Timeline Titan', minPoints: 1201, maxPoints: 1350 },
-  { name: 'History Hero', minPoints: 1351, maxPoints: 1845 }
+  { name: 'time tourist (newbie)', minPoints: 0, maxPoints: 100 },
+  { name: 'history hiker', minPoints: 101, maxPoints: 300 },
+  { name: 'past pathfinder', minPoints: 301, maxPoints: 600 },
+  { name: 'era explorer', minPoints: 601, maxPoints: 900 },
+  { name: 'chronology connoisseur', minPoints: 901, maxPoints: 1200 },
+  { name: 'timeline titan', minPoints: 1201, maxPoints: 1350 },
+  { name: 'history hero', minPoints: 1351, maxPoints: 1845 }
 ];
 
 // Continent diversity bonus tiers (percentage)
@@ -137,6 +137,158 @@ const getNextPeriodStartYear = (currentYear, continent = null) => {
     return endYear;
   }
   return endYear + 1;
+};
+
+// Helper function to get all available time periods for a continent
+const getAllTimePeriods = (continent) => {
+  const periods = [];
+  const startYear = continent === 'Antarctica' ? 1770 : 1500;
+  let currentYear = startYear;
+  
+  while (currentYear < 2000) {
+    const endYear = getPeriodEndYear(currentYear, continent);
+    if (endYear > 2000) break;
+    periods.push({ start: currentYear, end: endYear });
+    currentYear = getNextPeriodStartYear(currentYear, continent);
+  }
+  
+  return periods;
+};
+
+// 3D Time Scroll Device Component
+const TimeScrollDevice = ({ continent, currentYear, onPeriodSelect, isMobile }) => {
+  const periods = getAllTimePeriods(continent);
+  const containerRef = useRef(null);
+  
+  // Find current period index and scroll to it
+  useEffect(() => {
+    const currentIndex = periods.findIndex(p => p.start === currentYear);
+    if (currentIndex !== -1 && containerRef.current) {
+      const itemWidth = isMobile ? 100 : 120;
+      const containerWidth = containerRef.current.offsetWidth;
+      const targetScroll = (currentIndex * itemWidth) - (containerWidth / 2) + (itemWidth / 2);
+      containerRef.current.scrollLeft = targetScroll;
+    }
+  }, [currentYear, continent, isMobile, periods]);
+
+  const handlePeriodClick = (startYear) => {
+    onPeriodSelect(startYear);
+  };
+
+  return (
+    <div style={{
+      height: isMobile ? '150px' : '200px',
+      backgroundColor: '#111',
+      borderTop: '2px solid #333',
+      overflow: 'hidden',
+      position: 'relative',
+      perspective: '1000px'
+    }}>
+      <div style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        background: 'linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 10%, transparent 90%, rgba(0,0,0,0.8) 100%)',
+        pointerEvents: 'none',
+        zIndex: 2
+      }} />
+      <div
+        ref={containerRef}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          height: '100%',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          scrollBehavior: 'smooth',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          padding: '0 50%',
+          cursor: 'grab'
+        }}
+        onMouseDown={(e) => {
+          e.currentTarget.style.cursor = 'grabbing';
+        }}
+        onMouseUp={(e) => {
+          e.currentTarget.style.cursor = 'grab';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.cursor = 'grab';
+        }}
+      >
+        {periods.map((period) => {
+          const isCurrent = period.start === currentYear;
+          const distance = Math.abs(period.start - currentYear);
+          const scale = isCurrent ? 1.2 : Math.max(0.7, 1 - (distance / 1000) * 0.3);
+          const opacity = isCurrent ? 1 : Math.max(0.4, 1 - (distance / 1000) * 0.6);
+          const rotateY = (period.start - currentYear) * 0.1;
+          
+          return (
+            <div
+              key={`${period.start}-${period.end}`}
+              onClick={() => handlePeriodClick(period.start)}
+              style={{
+                minWidth: isMobile ? '100px' : '120px',
+                height: isMobile ? '100px' : '140px',
+                margin: '0 8px',
+                backgroundColor: isCurrent ? '#3498db' : '#222',
+                border: isCurrent ? '3px solid #fff' : '2px solid #444',
+                borderRadius: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                cursor: 'pointer',
+                transform: `scale(${scale}) perspective(1000px) rotateY(${rotateY}deg)`,
+                opacity: opacity,
+                transition: 'all 0.3s ease',
+                boxShadow: isCurrent 
+                  ? '0 8px 16px rgba(52, 152, 219, 0.5), 0 0 20px rgba(52, 152, 219, 0.3)'
+                  : '0 4px 8px rgba(0, 0, 0, 0.3)',
+                transformStyle: 'preserve-3d'
+              }}
+              onMouseEnter={(e) => {
+                if (!isCurrent) {
+                  e.currentTarget.style.transform = `scale(${scale * 1.1}) perspective(1000px) rotateY(${rotateY}deg)`;
+                  e.currentTarget.style.backgroundColor = '#2c3e50';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isCurrent) {
+                  e.currentTarget.style.transform = `scale(${scale}) perspective(1000px) rotateY(${rotateY}deg)`;
+                  e.currentTarget.style.backgroundColor = '#222';
+                }
+              }}
+            >
+              <div style={{
+                fontSize: isMobile ? '12px' : '14px',
+                fontWeight: 'bold',
+                color: '#fff',
+                textAlign: 'center',
+                marginBottom: '4px'
+              }}>
+                {period.start}
+              </div>
+              <div style={{
+                fontSize: isMobile ? '10px' : '11px',
+                color: '#bbb',
+                textAlign: 'center'
+              }}>
+                {period.end}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <style>{`
+        div::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+    </div>
+  );
 };
 
 function App() {
@@ -460,6 +612,11 @@ function App() {
         setHasCompletedFirstRound(true);
         if (!userName) {
           setShowNameInput(true);
+        } else {
+          // If user already has a name, make sure scrambled name is set
+          if (!scrambledName && userName) {
+            setScrambledName(scrambleName(userName));
+          }
         }
       }
     }
@@ -486,6 +643,15 @@ function App() {
       setShowNameInput(false);
       // Show a brief message
       alert(`Ok, we'll call you ${scrambled}.`);
+    } else {
+      // If no name provided, use a scrambled American name
+      const americanNames = ['Michael', 'James', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher'];
+      const randomName = americanNames[Math.floor(Math.random() * americanNames.length)];
+      const scrambled = scrambleName(randomName);
+      setUserName(randomName);
+      setScrambledName(scrambled);
+      setShowNameInput(false);
+      alert(`Ok, we'll call you ${scrambled}.`);
     }
   };
 
@@ -506,7 +672,7 @@ function App() {
         top: 0,
         left: 0,
         right: 0,
-        height: scrambledName ? '80px' : '60px',
+        height: (hasCompletedFirstRound && scrambledName) ? '80px' : '60px',
         backgroundColor: '#111',
         borderBottom: '2px solid #333',
         display: 'flex',
@@ -517,11 +683,11 @@ function App() {
         boxSizing: 'border-box'
       }}>
         <h1 style={{fontSize: isMobile ? '20px' : '24px', margin: 0, color: '#fff'}}>History Explorer</h1>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-          <div style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#fff' }}>
-            {scoreData.totalScore} pts
-          </div>
-          {scrambledName && (
+        {hasCompletedFirstRound && scrambledName && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+            <div style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#fff' }}>
+              {scoreData.totalScore} pts
+            </div>
             <div style={{ fontSize: isMobile ? '12px' : '14px', color: '#888', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               <div>
                 User: <span style={{ fontWeight: 'bold', color: '#fff' }}>{scrambledName}</span>
@@ -530,13 +696,8 @@ function App() {
                 {currentLevel.name}
               </div>
             </div>
-          )}
-          {!scrambledName && (
-            <div style={{ fontSize: isMobile ? '11px' : '12px', color: '#3498db' }}>
-              {currentLevel.name}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* LEFT PANEL: CONTENT */}
@@ -544,13 +705,15 @@ function App() {
         width: isMobile ? '100vw' : '50vw', 
         height: isMobile ? 'auto' : '100vh',
         padding: '30px',
-        paddingTop: scrambledName ? '100px' : '80px', // Account for fixed header
+        paddingTop: (hasCompletedFirstRound && scrambledName) ? '100px' : '80px', // Account for fixed header
+        paddingBottom: hasCompletedFirstRound ? '60px' : '30px', // Space for instructions button
         overflowY: 'auto', 
         backgroundColor: '#111', 
         color: '#fff', 
         borderBottom: isMobile ? '2px solid #333' : 'none',
         borderRight: isMobile ? 'none' : '2px solid #333',
-        boxSizing: 'border-box' 
+        boxSizing: 'border-box',
+        position: 'relative'
       }}>
 
         {loading ? (
@@ -622,41 +785,49 @@ function App() {
         ) : (
           <p style={{ color: '#888' }}>Spin the globe and pick a continent</p>
         )}
+      </div>
         
-        {/* Instructions Link */}
-        <div style={{ marginTop: '40px', paddingBottom: '20px', textAlign: 'center' }}>
+      {/* Instructions Button - Fixed at bottom */}
+      {hasCompletedFirstRound && (
+        <div style={{
+          position: 'fixed',
+          bottom: '20px',
+          left: isMobile ? '50%' : '25vw',
+          transform: isMobile ? 'translateX(-50%)' : 'none',
+          zIndex: 999
+        }}>
           <button
             onClick={() => setShowInstructions(true)}
             style={{
               background: 'transparent',
-              border: '1px solid #444',
+              border: 'none',
               color: '#888',
-              padding: '10px 20px',
-              borderRadius: '6px',
+              padding: '0',
               cursor: 'pointer',
               fontSize: '14px',
-              transition: 'all 0.2s'
+              textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+              transition: 'color 0.2s'
             }}
             onMouseEnter={(e) => {
-              e.target.style.borderColor = '#666';
               e.target.style.color = '#fff';
             }}
             onMouseLeave={(e) => {
-              e.target.style.borderColor = '#444';
               e.target.style.color = '#888';
             }}
           >
-            Instructions
+            instructions
           </button>
         </div>
-      </div>
+      )}
 
       {/* RIGHT PANEL: GLOBE */}
       <div style={{ 
         width: isMobile ? '100vw' : '50vw', 
         height: isMobile ? '50vh' : '100vh',
         backgroundColor: '#000',
-        position: 'relative'
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
         {/* Timer - moved to globe panel */}
         {timerActive && (
@@ -676,21 +847,40 @@ function App() {
         )}
         
         {/* Globe container */}
-        {geoData && geoData.features ? (
-          <Globe 
-            width={dimensions.width} 
-            height={dimensions.height} 
-            globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
-            backgroundColor="#000" 
-            polygonsData={geoData.features} 
-            polygonCapColor={getPolygonColor} 
-            onPolygonClick={(polygon) => {
-              console.log('🌐 Globe onPolygonClick triggered!', polygon);
-              handleContinentClick(polygon);
-            }} 
+        <div style={{ flex: '1', position: 'relative' }}>
+          {geoData && geoData.features ? (
+            <Globe 
+              width={dimensions.width} 
+              height={dimensions.height} 
+              globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
+              backgroundColor="#000" 
+              polygonsData={geoData.features} 
+              polygonCapColor={getPolygonColor} 
+              onPolygonClick={(polygon) => {
+                console.log('🌐 Globe onPolygonClick triggered!', polygon);
+                handleContinentClick(polygon);
+              }} 
+            />
+          ) : (
+            <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
+          )}
+        </div>
+
+        {/* 3D Time Scroll Device */}
+        {selectedContinent && (
+          <TimeScrollDevice 
+            continent={selectedContinent}
+            currentYear={progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500)}
+            onPeriodSelect={(startYear) => {
+              setProgress(prev => ({ ...prev, [selectedContinent]: startYear }));
+              setAnswers({});
+              setShowMoveAhead(false);
+              setTimeLeft(60);
+              setContent({ period: '', paragraph: '', questions: [] });
+              fetchHistory(startYear, selectedContinent);
+            }}
+            isMobile={isMobile}
           />
-        ) : (
-          <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
         )}
       </div>
       
@@ -728,7 +918,7 @@ function App() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-              <h2 style={{ color: '#fff', margin: 0, fontSize: '24px' }}>Instructions</h2>
+              <h2 style={{ color: '#fff', margin: 0, fontSize: '24px', textTransform: 'lowercase' }}>instructions</h2>
               <button
                 onClick={() => setShowInstructions(false)}
                 style={{
@@ -755,15 +945,16 @@ function App() {
               lineHeight: '1.8', 
               fontSize: '16px',
               paddingLeft: '20px',
-              margin: 0
+              margin: 0,
+              textTransform: 'lowercase'
             }}>
-              <li style={{ marginBottom: '12px' }}>Click on any continent on the globe to explore its history</li>
-              <li style={{ marginBottom: '12px' }}>Read the historical paragraph about that time period</li>
-              <li style={{ marginBottom: '12px' }}>Answer 3 multiple-choice questions (you have 60 seconds)</li>
-              <li style={{ marginBottom: '12px' }}>Get 2 points for 2 correct answers, or 3 points for all 3 correct</li>
-              <li style={{ marginBottom: '12px' }}>Explore different continents to earn bonus points</li>
-              <li style={{ marginBottom: '12px' }}>Progress through time periods by clicking "Next Era"</li>
-              <li style={{ marginBottom: '0' }}>Level up by earning more points across different continents</li>
+              <li style={{ marginBottom: '12px' }}>click on any continent on the globe to explore its history</li>
+              <li style={{ marginBottom: '12px' }}>read the historical paragraph about that time period</li>
+              <li style={{ marginBottom: '12px' }}>answer 3 multiple-choice questions (you have 60 seconds)</li>
+              <li style={{ marginBottom: '12px' }}>get 2 points for 2 correct answers, or 3 points for all 3 correct</li>
+              <li style={{ marginBottom: '12px' }}>explore different continents to earn bonus points</li>
+              <li style={{ marginBottom: '12px' }}>progress through time periods by clicking "next era"</li>
+              <li style={{ marginBottom: '0' }}>level up by earning more points across different continents</li>
             </ol>
           </div>
         </div>
