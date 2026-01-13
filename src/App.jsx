@@ -333,6 +333,13 @@ function App() {
     if (continent && CONTINENTS.includes(continent)) {
       console.log('✅ Valid continent selected, calling fetchHistory...');
       setSelectedContinent(continent);
+      
+      // Auto-spin globe to selected continent
+      if (globeRef.current && CONTINENT_COORDINATES[continent]) {
+        const coords = CONTINENT_COORDINATES[continent];
+        globeRef.current.pointOfView({ lat: coords.lat, lng: coords.lng }, 1000);
+      }
+      
       setAnswers({});
       setShowMoveAhead(false);
       setTimeLeft(60);
