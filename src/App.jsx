@@ -17,6 +17,17 @@ const CONTINENT_COORDINATES = {
   'South America': { lat: -8.7832, lng: -55.4915 }
 };
 
+// Unique base colors for each continent (RGB values)
+const CONTINENT_COLORS = {
+  'Africa': { r: 46, g: 204, b: 113 },      // Green
+  'Antarctica': { r: 149, g: 165, b: 166 }, // Gray
+  'Asia': { r: 231, g: 76, b: 60 },         // Red
+  'Europe': { r: 52, g: 152, b: 219 },      // Blue
+  'North America': { r: 155, g: 89, b: 182 }, // Purple
+  'Australia': { r: 241, g: 196, b: 15 },   // Yellow
+  'South America': { r: 230, g: 126, b: 34 } // Orange
+};
+
 // Levels system (max score with 30% bonus: 1,845 points)
 const LEVELS = [
   { name: 'time tourist (newbie)', minPoints: 0, maxPoints: 100 },
@@ -683,7 +694,7 @@ function App() {
         height: isMobile ? 'auto' : '100vh',
         padding: '30px',
         paddingTop: (hasCompletedFirstRound && scrambledName) ? '100px' : '80px', // Account for fixed header
-        paddingBottom: hasCompletedFirstRound ? '60px' : '30px', // Space for instructions button
+        paddingBottom: hasCompletedFirstRound ? '50px' : '30px', // Space for instructions panel
         overflowY: 'auto', 
         backgroundColor: '#111', 
         color: '#fff', 
@@ -774,38 +785,6 @@ function App() {
           <p style={{ color: '#888' }}>Spin the globe and pick a continent</p>
         )}
       </div>
-        
-      {/* Instructions Button - Fixed at bottom left */}
-      {hasCompletedFirstRound && (
-        <div style={{
-          position: 'fixed',
-          bottom: isMobile ? '170px' : '20px',
-          left: isMobile ? '20px' : '25vw',
-          zIndex: 999
-        }}>
-          <button
-            onClick={() => setShowInstructions(true)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#888',
-              padding: '0',
-              cursor: 'pointer',
-              fontSize: '14px',
-              textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
-              transition: 'color 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.color = '#fff';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.color = '#888';
-            }}
-          >
-            instructions
-          </button>
-        </div>
-      )}
 
       {/* RIGHT PANEL: GLOBE */}
       <div style={{ 
