@@ -226,9 +226,22 @@ const TimeCylinder = ({ continent, currentYear, onPeriodSelect, isMobile }) => {
     }
   }, [isDragging, startX, startRotation, rotation, periods, onPeriodSelect]);
 
-  const cylinderSize = isMobile ? 80 : 100;
-  const radius = cylinderSize * 0.8;
+  const cylinderSize = isMobile ? 70 : 90;
+  const cardWidth = isMobile ? 60 : 80;
+  const cardHeight = isMobile ? 70 : 90;
   const anglePerPeriod = periods.length > 0 ? 360 / periods.length : 0;
+
+  // Determine which period should be visible based on rotation
+  const getVisibleIndex = () => {
+    if (periods.length === 0) return -1;
+    const normalizedRotation = ((rotation % 360) + 360) % 360;
+    const angleToIndex = normalizedRotation < 180 
+      ? Math.round(normalizedRotation / anglePerPeriod)
+      : Math.round((360 - normalizedRotation) / anglePerPeriod);
+    return angleToIndex % periods.length;
+  };
+
+  const visibleIndex = getVisibleIndex();
 
   return (
     <div
@@ -236,81 +249,63 @@ const TimeCylinder = ({ continent, currentYear, onPeriodSelect, isMobile }) => {
       onMouseDown={handleMouseDown}
       onTouchStart={handleMouseDown}
       style={{
-        width: `${cylinderSize}px`,
-        height: `${cylinderSize * 1.5}px`,
+        width: `${cardWidth}px`,
+        height: `${cardHeight}px`,
         position: 'relative',
-        perspective: '1000px',
         cursor: isDragging ? 'grabbing' : 'grab',
         userSelect: 'none'
       }}
     >
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          position: 'relative',
-          transformStyle: 'preserve-3d',
-          transform: `rotateY(${rotation}deg)`,
-          transition: isDragging ? 'none' : 'transform 0.3s ease-out'
-        }}
-      >
-        {periods.map((period, index) => {
-          const isCurrent = period.start === currentYear;
-          const angle = index * anglePerPeriod;
-          const x = Math.sin((angle * Math.PI) / 180) * radius;
-          const z = Math.cos((angle * Math.PI) / 180) * radius;
-          const opacity = Math.abs(angle % 360) < 45 || Math.abs(angle % 360) > 315 ? 1 : 0.3;
-          
-          return (
-            <div
-              key={`${period.start}-${period.end}`}
-              onClick={() => onPeriodSelect(period.start)}
-              style={{
-                position: 'absolute',
-                width: `${cylinderSize * 0.6}px`,
-                height: `${cylinderSize * 0.8}px`,
-                left: '50%',
-                top: '50%',
-                marginLeft: `-${cylinderSize * 0.3}px`,
-                marginTop: `-${cylinderSize * 0.4}px`,
-                backgroundColor: isCurrent ? '#3498db' : '#222',
-                border: isCurrent ? '2px solid #fff' : '1px solid #444',
-                borderRadius: '8px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                cursor: 'pointer',
-                transform: `translate3d(${x}px, 0, ${z}px) rotateY(${angle}deg)`,
-                transformStyle: 'preserve-3d',
-                opacity: opacity,
-                transition: isDragging ? 'none' : 'opacity 0.3s ease',
-                boxShadow: isCurrent 
-                  ? '0 4px 8px rgba(52, 152, 219, 0.5)'
-                  : '0 2px 4px rgba(0, 0, 0, 0.3)',
-                pointerEvents: opacity > 0.5 ? 'auto' : 'none'
-              }}
-            >
-              <div style={{
-                fontSize: isMobile ? '9px' : '11px',
-                fontWeight: 'bold',
-                color: '#fff',
-                textAlign: 'center',
-                marginBottom: '2px'
-              }}>
-                {period.start}
-              </div>
-              <div style={{
-                fontSize: isMobile ? '7px' : '9px',
-                color: '#bbb',
-                textAlign: 'center'
-              }}>
-                {period.end}
-              </div>
+      {periods.map((period, index) => {
+        const isVisible = index === visibleIndex;
+        const isCurrent = period.start === currentYear;
+        
+        return (
+          <div
+            key={`${period.start}-${period.end}`}
+            onClick={() => onPeriodSelect(period.start)}
+            style={{
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              top: 0,
+              left: 0,
+              backgroundColor: isCurrent ? '#3498db' : '#222',
+              border: isCurrent ? '2px solid #fff' : '1px solid #444',
+              borderRadius: '8px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              cursor: 'pointer',
+              opacity: isVisible ? 1 : 0,
+              transition: isDragging ? 'none' : 'opacity 0.2s ease',
+              pointerEvents: isVisible ? 'auto' : 'none',
+              boxShadow: isCurrent 
+                ? '0 4px 12px rgba(52, 152, 219, 0.6)'
+                : '0 2px 6px rgba(0, 0, 0, 0.4)',
+              zIndex: isVisible ? 10 : 1
+            }}
+          >
+            <div style={{
+              fontSize: isMobile ? '10px' : '12px',
+              fontWeight: 'bold',
+              color: '#fff',
+              textAlign: 'center',
+              marginBottom: '4px'
+            }}>
+              {period.start}
             </div>
-          );
-        })}
-      </div>
+            <div style={{
+              fontSize: isMobile ? '8px' : '10px',
+              color: '#bbb',
+              textAlign: 'center'
+            }}>
+              {period.end}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -888,13 +883,12 @@ function App() {
             <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
           )}
           
-          {/* 3D Time Cylinder - Desktop: next to globe */}
+          {/* 3D Time Cylinder - Desktop: bottom left of globe */}
           {!isMobile && selectedContinent && (
             <div style={{
               position: 'absolute',
-              right: '20px',
-              top: '50%',
-              transform: 'translateY(-50%)',
+              left: '20px',
+              bottom: '20px',
               zIndex: 100
             }}>
               <TimeCylinder 
