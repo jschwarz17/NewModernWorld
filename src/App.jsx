@@ -831,6 +831,40 @@ function App() {
         </div>
       </div>
 
+      {/* Instructions Panel - Fixed at bottom */}
+      {hasCompletedFirstRound && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: '#000',
+          padding: '10px 30px',
+          zIndex: 999,
+          border: 'none'
+        }}>
+          <button
+            onClick={() => setShowInstructions(true)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#888',
+              padding: '0',
+              cursor: 'pointer',
+              fontSize: '14px',
+              transition: 'color 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.color = '#fff';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.color = '#888';
+            }}
+          >
+            instructions
+          </button>
+        </div>
+      )}
       
       {/* Instructions Modal */}
       {showInstructions && (
