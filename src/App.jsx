@@ -155,160 +155,6 @@ const getAllTimePeriods = (continent) => {
   return periods;
 };
 
-// 3D Time Cylinder Component
-const TimeCylinder = ({ continent, currentYear, onPeriodSelect, isMobile }) => {
-  const periods = getAllTimePeriods(continent);
-  const [rotation, setRotation] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [startRotation, setStartRotation] = useState(0);
-  const cylinderRef = useRef(null);
-  
-  // Calculate rotation to show current period
-  useEffect(() => {
-    const currentIndex = periods.findIndex(p => p.start === currentYear);
-    if (currentIndex !== -1 && periods.length > 0) {
-      const anglePerPeriod = 360 / periods.length;
-      const targetRotation = -currentIndex * anglePerPeriod;
-      setRotation(targetRotation);
-    }
-  }, [currentYear, continent, periods]);
-
-  const handleMouseDown = (e) => {
-    setIsDragging(true);
-    setStartX(e.clientX || e.touches?.[0]?.clientX);
-    setStartRotation(rotation);
-    e.preventDefault();
-  };
-
-  useEffect(() => {
-    const handleMouseMoveGlobal = (e) => {
-      if (!isDragging) return;
-      const currentX = e.clientX || e.touches?.[0]?.clientX;
-      const deltaX = currentX - startX;
-      const sensitivity = 0.5;
-      const newRotation = startRotation + deltaX * sensitivity;
-      setRotation(newRotation);
-    };
-
-    const handleMouseUpGlobal = () => {
-      if (!isDragging) return;
-      setIsDragging(false);
-      
-      // Snap to nearest period
-      const anglePerPeriod = 360 / periods.length;
-      const normalizedRotation = ((rotation % 360) + 360) % 360;
-      const nearestIndex = Math.round(Math.abs(normalizedRotation) / anglePerPeriod) % periods.length;
-      const actualIndex = normalizedRotation < 0 
-        ? (periods.length - nearestIndex) % periods.length 
-        : nearestIndex;
-      const targetRotation = -actualIndex * anglePerPeriod;
-      setRotation(targetRotation);
-      
-      // Select the period
-      if (periods[actualIndex]) {
-        onPeriodSelect(periods[actualIndex].start);
-      }
-    };
-
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMoveGlobal);
-      document.addEventListener('mouseup', handleMouseUpGlobal);
-      document.addEventListener('touchmove', handleMouseMoveGlobal, { passive: false });
-      document.addEventListener('touchend', handleMouseUpGlobal);
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMoveGlobal);
-        document.removeEventListener('mouseup', handleMouseUpGlobal);
-        document.removeEventListener('touchmove', handleMouseMoveGlobal);
-        document.removeEventListener('touchend', handleMouseUpGlobal);
-      };
-    }
-  }, [isDragging, startX, startRotation, rotation, periods, onPeriodSelect]);
-
-  const cylinderSize = isMobile ? 70 : 90;
-  const cardWidth = isMobile ? 60 : 80;
-  const cardHeight = isMobile ? 70 : 90;
-  const anglePerPeriod = periods.length > 0 ? 360 / periods.length : 0;
-
-  // Determine which period should be visible based on rotation
-  const getVisibleIndex = () => {
-    if (periods.length === 0) return -1;
-    const normalizedRotation = ((rotation % 360) + 360) % 360;
-    const angleToIndex = normalizedRotation < 180 
-      ? Math.round(normalizedRotation / anglePerPeriod)
-      : Math.round((360 - normalizedRotation) / anglePerPeriod);
-    return angleToIndex % periods.length;
-  };
-
-  const visibleIndex = getVisibleIndex();
-
-  return (
-    <div
-      ref={cylinderRef}
-      onMouseDown={handleMouseDown}
-      onTouchStart={handleMouseDown}
-      style={{
-        width: `${cardWidth}px`,
-        height: `${cardHeight}px`,
-        position: 'relative',
-        cursor: isDragging ? 'grabbing' : 'grab',
-        userSelect: 'none'
-      }}
-    >
-      {periods.map((period, index) => {
-        const isVisible = index === visibleIndex;
-        const isCurrent = period.start === currentYear;
-        
-        return (
-          <div
-            key={`${period.start}-${period.end}`}
-            onClick={() => onPeriodSelect(period.start)}
-            style={{
-              position: 'absolute',
-              width: '100%',
-              height: '100%',
-              top: 0,
-              left: 0,
-              backgroundColor: isCurrent ? '#3498db' : '#222',
-              border: isCurrent ? '2px solid #fff' : '1px solid #444',
-              borderRadius: '8px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              cursor: 'pointer',
-              opacity: isVisible ? 1 : 0,
-              transition: isDragging ? 'none' : 'opacity 0.2s ease',
-              pointerEvents: isVisible ? 'auto' : 'none',
-              boxShadow: isCurrent 
-                ? '0 4px 12px rgba(52, 152, 219, 0.6)'
-                : '0 2px 6px rgba(0, 0, 0, 0.4)',
-              zIndex: isVisible ? 10 : 1
-            }}
-          >
-            <div style={{
-              fontSize: isMobile ? '10px' : '12px',
-              fontWeight: 'bold',
-              color: '#fff',
-              textAlign: 'center',
-              marginBottom: '4px'
-            }}>
-              {period.start}
-            </div>
-            <div style={{
-              fontSize: isMobile ? '8px' : '10px',
-              color: '#bbb',
-              textAlign: 'center'
-            }}>
-              {period.end}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
 
 function App() {
   console.log('🚀 App component loaded!');
@@ -339,6 +185,18 @@ function App() {
   const [continentScores, setContinentScores] = useState(() => {
     const saved = localStorage.getItem('history_continentScores');
     return saved ? JSON.parse(saved) : {};
+  });
+
+  // Track completed rounds with 2+ correct answers
+  const [completedRounds, setCompletedRounds] = useState(() => {
+    const saved = localStorage.getItem('history_completedRounds');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Track completed continent-time period combos
+  const [completedCombos, setCompletedCombos] = useState(() => {
+    const saved = localStorage.getItem('history_completedCombos');
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [progress, setProgress] = useState(() => {
@@ -372,6 +230,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('history_continentScores', JSON.stringify(continentScores));
   }, [continentScores]);
+
+  useEffect(() => {
+    localStorage.setItem('history_completedRounds', JSON.stringify(completedRounds));
+  }, [completedRounds]);
+
+  useEffect(() => {
+    localStorage.setItem('history_completedCombos', JSON.stringify(completedCombos));
+  }, [completedCombos]);
 
   useEffect(() => {
     let timer;
@@ -649,6 +515,42 @@ function App() {
     setTimeLeft(60); 
     setContent({ period: '', paragraph: '', questions: [] });
     fetchHistory(nextYear, selectedContinent);
+  };
+
+  const handleAdventure = () => {
+    // Get all possible continent-time period combos
+    const allCombos = [];
+    CONTINENTS.forEach(continent => {
+      const periods = getAllTimePeriods(continent);
+      periods.forEach(period => {
+        const comboKey = `${continent}_${period.start}-${period.end}`;
+        if (!completedCombos.includes(comboKey)) {
+          allCombos.push({ continent, startYear: period.start, endYear: period.end });
+        }
+      });
+    });
+
+    if (allCombos.length === 0) {
+      // All combos completed, just pick any random one
+      CONTINENTS.forEach(continent => {
+        const periods = getAllTimePeriods(continent);
+        periods.forEach(period => {
+          allCombos.push({ continent, startYear: period.start, endYear: period.end });
+        });
+      });
+    }
+
+    if (allCombos.length > 0) {
+      const randomCombo = allCombos[Math.floor(Math.random() * allCombos.length)];
+      setSelectedContinent(randomCombo.continent);
+      setProgress(prev => ({ ...prev, [randomCombo.continent]: randomCombo.startYear }));
+      setAnswers({});
+      setShowMoveAhead(false);
+      setTimeLeft(60);
+      setContent({ period: '', paragraph: '', questions: [] });
+      fetchHistory(randomCombo.startYear, randomCombo.continent);
+      if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleNameSubmit = (e) => {
