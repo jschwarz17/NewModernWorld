@@ -258,6 +258,10 @@ function App() {
   }, [completedCombos]);
 
   useEffect(() => {
+    localStorage.setItem('history_adventureUnlocked', adventureUnlocked.toString());
+  }, [adventureUnlocked]);
+
+  useEffect(() => {
     let timer;
     if (timerActive && timeLeft > 0) {
       timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
@@ -496,7 +500,15 @@ function App() {
         });
         
         // Track this as a completed round
-        setCompletedRounds(prev => [...prev, { continent: selectedContinent, period: periodKey, correctCount }]);
+        setCompletedRounds(prev => {
+          const newRounds = [...prev, { continent: selectedContinent, period: periodKey, correctCount }];
+          // Check if Adventure should be unlocked (3+ rounds with 2+ correct)
+          const recentRounds = newRounds.filter(r => r.correctCount >= 2);
+          if (recentRounds.length >= 3 && !adventureUnlocked) {
+            setAdventureUnlocked(true);
+          }
+          return newRounds;
+        });
         
         setContinentScores(prev => {
           const newScores = { ...prev };
@@ -737,32 +749,26 @@ function App() {
                 <p style={{ color: '#888', fontStyle: 'italic' }}>Questions are being generated...</p>
               </div>
             )}
-            {showMoveAhead && (() => {
-              // Check if we have 3+ rounds with 2+ correct
-              const recentRounds = completedRounds.filter(r => r.correctCount >= 2);
-              const showAdventure = recentRounds.length >= 3;
-              
-              return (
-                <div style={{ display: 'flex', gap: '10px', marginTop: '20px', marginBottom: '20px' }}>
-                  <button onClick={handleMoveAhead} style={{
-                    flex: 1, padding: '15px', background: '#0d6efd', color: '#fff', 
+            {showMoveAhead && (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px', marginBottom: '20px' }}>
+                <button onClick={handleMoveAhead} style={{
+                  flex: 1, padding: '15px', background: '#0d6efd', color: '#fff', 
+                  border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', 
+                  fontWeight: 'bold'
+                }}>
+                  Next Era →
+                </button>
+                {adventureUnlocked && (
+                  <button onClick={handleAdventure} style={{
+                    flex: 1, padding: '15px', background: '#27ae60', color: '#fff', 
                     border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', 
                     fontWeight: 'bold'
                   }}>
-                    Next Era →
+                    Adventure
                   </button>
-                  {showAdventure && (
-                    <button onClick={handleAdventure} style={{
-                      flex: 1, padding: '15px', background: '#27ae60', color: '#fff', 
-                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', 
-                      fontWeight: 'bold'
-                    }}>
-                      Adventure
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <p style={{ color: '#888' }}>Spin the globe and pick a continent</p>
