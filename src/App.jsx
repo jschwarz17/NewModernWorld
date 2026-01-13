@@ -933,10 +933,10 @@ function App() {
               <li style={{ marginBottom: '12px' }}>click on any continent on the globe to explore its history</li>
               <li style={{ marginBottom: '12px' }}>read the historical paragraph about that time period</li>
               <li style={{ marginBottom: '12px' }}>answer 3 multiple-choice questions (you have 60 seconds)</li>
-              <li style={{ marginBottom: '12px' }}>get 2 points for 2 correct answers, or 3 points for all 3 correct</li>
+              <li style={{ marginBottom: '12px' }}>get 2 points for 2 correct answers or 3 points for all 3 correct (0 points for 1 correct; we don't like guessers)</li>
               <li style={{ marginBottom: '12px' }}>explore different continents to earn bonus points</li>
               <li style={{ marginBottom: '12px' }}>progress through time periods by clicking "next era"</li>
-              <li style={{ marginBottom: '0' }}>level up by earning more points across different continents</li>
+              <li style={{ marginBottom: '0' }}>earn more points and you will earn credentials and more options</li>
             </ol>
           </div>
         </div>
