@@ -461,6 +461,18 @@ function App() {
         const periodKey = content.period;
         const points = correctCount === 3 ? 3 : 2; // 3 points for all correct, 2 for 2 correct
         
+        // Track this combo as completed
+        const comboKey = `${selectedContinent}_${periodKey}`;
+        setCompletedCombos(prev => {
+          if (!prev.includes(comboKey)) {
+            return [...prev, comboKey];
+          }
+          return prev;
+        });
+        
+        // Track this as a completed round
+        setCompletedRounds(prev => [...prev, { continent: selectedContinent, period: periodKey, correctCount }]);
+        
         setContinentScores(prev => {
           const newScores = { ...prev };
           if (!newScores[selectedContinent]) {
@@ -693,15 +705,32 @@ function App() {
                 <p style={{ color: '#888', fontStyle: 'italic' }}>Questions are being generated...</p>
               </div>
             )}
-            {showMoveAhead && (
-              <button onClick={handleMoveAhead} style={{
-                width: '100%', padding: '15px', background: '#0d6efd', color: '#fff', 
-                border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', 
-                fontWeight: 'bold', marginTop: '20px', marginBottom: '20px'
-              }}>
-                Next Era →
-              </button>
-            )}
+            {showMoveAhead && (() => {
+              // Check if we have 3+ rounds with 2+ correct
+              const recentRounds = completedRounds.filter(r => r.correctCount >= 2);
+              const showAdventure = recentRounds.length >= 3;
+              
+              return (
+                <div style={{ display: 'flex', gap: '10px', marginTop: '20px', marginBottom: '20px' }}>
+                  <button onClick={handleMoveAhead} style={{
+                    flex: 1, padding: '15px', background: '#0d6efd', color: '#fff', 
+                    border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', 
+                    fontWeight: 'bold'
+                  }}>
+                    Next Era →
+                  </button>
+                  {showAdventure && (
+                    <button onClick={handleAdventure} style={{
+                      flex: 1, padding: '15px', background: '#27ae60', color: '#fff', 
+                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', 
+                      fontWeight: 'bold'
+                    }}>
+                      Adventure
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <p style={{ color: '#888' }}>Spin the globe and pick a continent</p>
