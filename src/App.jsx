@@ -328,21 +328,17 @@ function App() {
     const scoredPeriods = continentScores[continent] || [];
     const score = scoredPeriods.length;
     
-    // Base color based on progress year
-    const year = progress[continent] || 1500;
-    const baseOpacity = Math.max(0.1, Math.min(0.7, (year - 1500) / 500));
+    // Get the base color for this continent
+    const baseColor = CONTINENT_COLORS[continent] || { r: 30, g: 144, b: 255 };
     
-    // Add color intensity based on score (light green shading that gets darker)
-    // Score 0: no extra color
-    // Score 1+: light green (rgba(46, 204, 113, ...)) that gets darker with more scores
-    if (score > 0) {
-      // Light green shading: start at 0.2 opacity, increase by 0.15 per score level
-      const greenOpacity = Math.min(0.8, 0.2 + (score * 0.15));
-      return `rgba(46, 204, 113, ${greenOpacity})`;
-    }
+    // Start with very light color (low opacity) and get darker with each successful round
+    // Score 0: very light (opacity 0.15)
+    // Score 1+: start at 0.25 and increase by 0.12 per score, max at 0.85
+    const opacity = score === 0 
+      ? 0.15 
+      : Math.min(0.85, 0.25 + (score * 0.12));
     
-    // Default blue color based on progress
-    return `rgba(30, 144, 255, ${baseOpacity})`;
+    return `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${opacity})`;
   };
 
   const handleContinentClick = (polygon) => {
