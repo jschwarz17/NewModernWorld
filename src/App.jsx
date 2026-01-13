@@ -785,55 +785,9 @@ function App() {
             <div style={{ color: '#fff', padding: '20px' }}>Loading globe...</div>
           )}
           
-          {/* 3D Time Cylinder - Desktop: bottom left of globe */}
-          {!isMobile && selectedContinent && (
-            <div style={{
-              position: 'absolute',
-              left: '20px',
-              bottom: '20px',
-              zIndex: 100
-            }}>
-              <TimeCylinder 
-                continent={selectedContinent}
-                currentYear={progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500)}
-                onPeriodSelect={(startYear) => {
-                  setProgress(prev => ({ ...prev, [selectedContinent]: startYear }));
-                  setAnswers({});
-                  setShowMoveAhead(false);
-                  setTimeLeft(60);
-                  setContent({ period: '', paragraph: '', questions: [] });
-                  fetchHistory(startYear, selectedContinent);
-                }}
-                isMobile={isMobile}
-              />
-            </div>
-          )}
         </div>
       </div>
 
-      {/* 3D Time Cylinder - Mobile: Fixed at bottom right, visible over globe */}
-      {isMobile && selectedContinent && (
-        <div style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          zIndex: 998
-        }}>
-          <TimeCylinder 
-            continent={selectedContinent}
-            currentYear={progress[selectedContinent] || (selectedContinent === 'Antarctica' ? 1770 : 1500)}
-            onPeriodSelect={(startYear) => {
-              setProgress(prev => ({ ...prev, [selectedContinent]: startYear }));
-              setAnswers({});
-              setShowMoveAhead(false);
-              setTimeLeft(60);
-              setContent({ period: '', paragraph: '', questions: [] });
-              fetchHistory(startYear, selectedContinent);
-            }}
-            isMobile={isMobile}
-          />
-        </div>
-      )}
       
       {/* Instructions Modal */}
       {showInstructions && (
