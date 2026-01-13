@@ -169,6 +169,7 @@ const getAllTimePeriods = (continent) => {
 
 function App() {
   console.log('🚀 App component loaded!');
+  const globeRef = useRef();
   const [geoData, setGeoData] = useState(null);
   const [selectedContinent, setSelectedContinent] = useState(null);
   const [content, setContent] = useState({ period: '', paragraph: '', questions: [] });
@@ -824,6 +825,7 @@ function App() {
         <div style={{ flex: '1', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {geoData && geoData.features ? (
             <Globe 
+              ref={globeRef}
               width={dimensions.width} 
               height={dimensions.height} 
               globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
