@@ -6,9 +6,53 @@ const GEO_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/
 const API_KEY = import.meta.env.VITE_GROK_PART1 + import.meta.env.VITE_GROK_PART2;
 const CONTINENTS = ['Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'];
 
-// Helper function to scramble a name
+// Helper function to scramble a name randomly
 const scrambleName = (name) => {
-  return name.split('').reverse().join('');
+  const chars = name.split('');
+  // Fisher-Yates shuffle algorithm
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+};
+
+// Helper function to get period end year based on start year
+const getPeriodEndYear = (startYear) => {
+  if (startYear < 1701) {
+    // 50-year periods: 1500-1550, 1551-1600, 1601-1650, 1651-1700
+    const periodStart = Math.floor((startYear - 1500) / 50) * 50 + 1500;
+    return periodStart + 50;
+  } else if (startYear < 1801) {
+    // 20-year periods: 1701-1720, 1721-1740, 1741-1760, 1761-1780, 1781-1800
+    const periodStart = Math.floor((startYear - 1701) / 20) * 20 + 1701;
+    return periodStart + 20;
+  } else if (startYear < 1901) {
+    // 10-year periods: 1801-1810, 1811-1820, ..., 1891-1900
+    const periodStart = Math.floor((startYear - 1801) / 10) * 10 + 1801;
+    return periodStart + 10;
+  } else if (startYear < 1951) {
+    // 5-year periods: 1901-1905, 1906-1910, ..., 1946-1950
+    const periodStart = Math.floor((startYear - 1901) / 5) * 5 + 1901;
+    return periodStart + 5;
+  } else {
+    // 1-year periods: 1951-1952, 1952-1953, ..., 1999-2000
+    return startYear + 1;
+  }
+};
+
+// Helper function to get next period start year
+const getNextPeriodStartYear = (currentYear) => {
+  const endYear = getPeriodEndYear(currentYear);
+  if (endYear >= 2000) {
+    return 2000; // Don't go beyond 2000
+  }
+  // For 1-year periods (1951+), next period starts at endYear (no gap)
+  // For all other periods, next period starts at endYear + 1 (there's a gap)
+  if (currentYear >= 1951) {
+    return endYear;
+  }
+  return endYear + 1;
 };
 
 function App() {
@@ -168,7 +212,7 @@ function App() {
     console.log('🚀 fetchHistory called with:', { year, continentName });
     setLoading(true);
     setError(null);
-    const endYear = year + 50;
+    const endYear = getPeriodEndYear(year);
 
     console.log('🔑 API_KEY check:', API_KEY ? 'Present' : 'Missing', API_KEY?.substring(0, 10) + '...');
     if (!API_KEY || API_KEY.includes('undefined')) {
@@ -310,7 +354,7 @@ function App() {
   };
 
   const handleMoveAhead = () => {
-    const nextYear = progress[selectedContinent] + 50;
+    const nextYear = getNextPeriodStartYear(progress[selectedContinent]);
     setProgress(prev => ({ ...prev, [selectedContinent]: nextYear }));
     setAnswers({});
     setShowMoveAhead(false);
