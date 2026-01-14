@@ -171,10 +171,24 @@ const getAllTimePeriods = (continent) => {
   return periods;
 };
 
+// Helper function to find the earliest unseen time period for a continent
+const getEarliestUnseenPeriod = (continent, viewedCombos) => {
+  const periods = getAllTimePeriods(continent);
+  for (const period of periods) {
+    const comboKey = `${continent}_${period.start}-${period.end}`;
+    if (!viewedCombos.includes(comboKey)) {
+      return period.start;
+    }
+  }
+  // If all periods have been viewed, return the earliest one
+  return periods.length > 0 ? periods[0].start : (continent === 'Antarctica' ? 1770 : 1500);
+};
+
 
 function App() {
   console.log('🚀 App component loaded!');
   const globeRef = useRef();
+  const viewTimerRef = useRef(null);
   const [geoData, setGeoData] = useState(null);
   const [selectedContinent, setSelectedContinent] = useState(null);
   const [content, setContent] = useState({ period: '', paragraph: '', questions: [] });
@@ -213,6 +227,12 @@ function App() {
   // Track completed continent-time period combos
   const [completedCombos, setCompletedCombos] = useState(() => {
     const saved = localStorage.getItem('history_completedCombos');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Track viewed continent-time period combos (spent 5+ seconds)
+  const [viewedCombos, setViewedCombos] = useState(() => {
+    const saved = localStorage.getItem('history_viewedCombos');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -269,6 +289,10 @@ function App() {
   }, [completedCombos]);
 
   useEffect(() => {
+    localStorage.setItem('history_viewedCombos', JSON.stringify(viewedCombos));
+  }, [viewedCombos]);
+
+  useEffect(() => {
     localStorage.setItem('history_adventureUnlocked', adventureUnlocked.toString());
   }, [adventureUnlocked]);
 
@@ -310,7 +334,7 @@ function App() {
             const periods = getAllTimePeriods(cont);
             periods.forEach(period => {
               const comboKey = `${cont}_${period.start}-${period.end}`;
-              if (!completedCombos.includes(comboKey)) {
+              if (!viewedCombos.includes(comboKey)) {
                 allCombos.push({ continent: cont, startYear: period.start, endYear: period.end });
               }
             });
@@ -338,7 +362,7 @@ function App() {
         return currentCache; // Return unchanged (update happens in async callback)
       });
     }
-  }, [showMoveAhead, selectedContinent, completedRounds, progress, completedCombos]);
+  }, [showMoveAhead, selectedContinent, completedRounds, progress, viewedCombos]);
 
   useEffect(() => {
     let timer;
@@ -350,6 +374,37 @@ function App() {
     }
     return () => clearInterval(timer);
   }, [timerActive, timeLeft]);
+
+  // Track time spent on a combo and mark as viewed after 5 seconds
+  useEffect(() => {
+    // Clear any existing timer
+    if (viewTimerRef.current) {
+      clearTimeout(viewTimerRef.current);
+      viewTimerRef.current = null;
+    }
+    
+    if (!selectedContinent || !content.period || loading) return;
+    
+    const comboKey = `${selectedContinent}_${content.period}`;
+    
+    // Start timer to mark as viewed after 5 seconds
+    viewTimerRef.current = setTimeout(() => {
+      setViewedCombos(prev => {
+        if (!prev.includes(comboKey)) {
+          return [...prev, comboKey];
+        }
+        return prev;
+      });
+      viewTimerRef.current = null;
+    }, 5000); // 5 seconds
+    
+    return () => {
+      if (viewTimerRef.current) {
+        clearTimeout(viewTimerRef.current);
+        viewTimerRef.current = null;
+      }
+    };
+  }, [selectedContinent, content.period, loading]);
 
   const [dimensions, setDimensions] = useState({
     width: isMobile ? window.innerWidth : window.innerWidth / 2,
@@ -432,10 +487,14 @@ function App() {
       setTimerActive(false);
       setContent({ period: '', paragraph: '', questions: [] });
       setError(null);
-      const defaultYear = continent === 'Antarctica' ? 1770 : 1500;
-      const year = progress[continent] || defaultYear;
+      
+      // Find the earliest unseen time period for this continent
+      const year = getEarliestUnseenPeriod(continent, viewedCombos);
       console.log('🔵 Calling fetchHistory with:', { year, continent });
       fetchHistory(year, continent);
+      
+      // Update progress for this continent
+      setProgress(prev => ({ ...prev, [continent]: year }));
       
       // Prefetch next time period for this continent in the background
       const nextYear = getNextPeriodStartYear(year, continent);
@@ -700,11 +759,18 @@ function App() {
       }
       
       setProgress(prev => ({ ...prev, [cached.continent]: cached.year }));
-      setContent(cached.data);
       setAnswers({});
       setShowMoveAhead(false);
       setTimeLeft(60);
-      setTimerActive(true);
+      setContent({ period: '', paragraph: '', questions: [] });
+      setError(null);
+      
+      // Delay content setting to sync with globe animation completion (1000ms + 20ms buffer)
+      setTimeout(() => {
+        setContent(cached.data);
+        setTimerActive(true);
+      }, 1020);
+      
       // Clear the cache
       setPrefetchCache(prev => ({ ...prev, adventure: null }));
       if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -715,14 +781,14 @@ function App() {
         const periods = getAllTimePeriods(continent);
         periods.forEach(period => {
           const comboKey = `${continent}_${period.start}-${period.end}`;
-          if (!completedCombos.includes(comboKey)) {
+          if (!viewedCombos.includes(comboKey)) {
             allCombos.push({ continent, startYear: period.start, endYear: period.end });
           }
         });
       });
 
       if (allCombos.length === 0) {
-        // All combos completed, just pick any random one
+        // All combos viewed, just pick any random one
         CONTINENTS.forEach(continent => {
           const periods = getAllTimePeriods(continent);
           periods.forEach(period => {
@@ -746,7 +812,13 @@ function App() {
         setShowMoveAhead(false);
         setTimeLeft(60);
         setContent({ period: '', paragraph: '', questions: [] });
-        fetchHistory(randomCombo.startYear, randomCombo.continent);
+        setError(null);
+        
+        // Delay fetchHistory to sync with globe animation completion (1000ms + 20ms buffer)
+        setTimeout(() => {
+          fetchHistory(randomCombo.startYear, randomCombo.continent);
+        }, 1020);
+        
         if (isMobile) window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     }
